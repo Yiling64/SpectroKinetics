@@ -29,8 +29,6 @@ if "global_unit" not in st.session_state:
   st.session_state.global_unit = "mg/ml"
 if "editor_version" not in st.session_state:
   st.session_state.editor_version = 0
-if "selected_comp" not in st.session_state:
-  st.session_state.selected_comp = None
 if "history_stack" not in st.session_state:
   st.session_state.history_stack = []
 
@@ -70,57 +68,6 @@ section[data-testid="stSidebar"] span {
     color: #0f172a !important;
     font-weight: 500;
 }
-section[data-testid="stSidebar"] input {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    border: 1px solid #cbd5e1 !important;
-    border-radius: 6px !important;
-}
-
-/* 檔案上傳區塊 */
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
-    background-color: #ffffff !important;
-    border-radius: 8px !important;
-    padding: 6px !important;
-    border: 1px dashed #94a3b8 !important;
-}
-section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
-    background-color: #f8fafc !important;
-}
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] small,
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] span,
-section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
-    color: #334155 !important;
-}
-
-/* 頂部橫幅 */
-.app-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: #ffffff;
-    padding: 12px 20px;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    margin-bottom: 1rem;
-}
-.app-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: #0f172a;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-.app-badge {
-    font-size: 0.75rem;
-    font-weight: 600;
-    background: #e0f2fe;
-    color: #0369a1;
-    padding: 2px 8px;
-    border-radius: 4px;
-}
 
 /* 卡片容器 */
 .workspace-card {
@@ -128,11 +75,11 @@ section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 16px;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.02);
 }
 .card-header {
-    font-size: 0.95rem;
+    font-size: 1rem;
     font-weight: 700;
     color: #1e293b;
     border-bottom: 1px solid #f1f5f9;
@@ -143,26 +90,34 @@ section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
     align-items: center;
 }
 
-/* Tab 樣式 */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 6px;
-    background-color: #e2e8f0;
-    padding: 4px;
-    border-radius: 8px;
+.app-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
-.stTabs [data-baseweb="tab"] {
-    height: 36px;
-    border-radius: 6px;
-    font-size: 13px;
+.app-badge {
+    font-size: 0.8rem;
     font-weight: 600;
-    color: #475569;
-    background: transparent;
-    padding: 0 14px;
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 3px 10px;
+    border-radius: 4px;
 }
-.stTabs [aria-selected="true"] {
-    background-color: #ffffff !important;
-    color: #0f172a !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+
+.date-divider {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 14px 0 8px 0;
+    font-weight: 700;
+    color: #0369a1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 </style>
 """
@@ -332,7 +287,18 @@ def parse_txt_files(uploaded_files, def_unit):
     if low_k in canonical_names:
       item["化合物 (Compound)"] = canonical_names[low_k]
 
-  return parsed_dict, pd.DataFrame(meta_list)
+  df_res = pd.DataFrame(meta_list)
+  if not df_res.empty:
+    df_res["_dt_sort"] = pd.to_datetime(
+        df_res["日期 (Date)"], format="%d-%m-%Y", errors="coerce"
+    )
+    df_res = (
+        df_res.sort_values(by=["_dt_sort", "測量時間"])
+        .drop(columns=["_dt_sort"])
+        .reset_index(drop=True)
+    )
+
+  return parsed_dict, df_res
 
 
 # ================= 側邊欄控制面板 =================
@@ -426,27 +392,20 @@ with header_right:
 # ================= 主工作區 =================
 if not st.session_state.df_meta.empty:
   unit_options = ["μM", "mM", "μg/ml", "mg/ml", "nM", "M", "%", "-"]
-  selected_df = st.session_state.df_meta[st.session_state.df_meta["選取"] == True]
-  unique_dates = selected_df["日期 (Date)"].unique()
 
-  compounds_all = sorted(
-      st.session_state.df_meta["化合物 (Compound)"].unique(),
-      key=lambda x: (
-          0
-          if any(
-              k in x.lower()
-              for k in ["basal", "control", "water+water", "water+reagent"]
-          )
-          else 1,
-          x.lower(),
-      ),
+  # 確保日期排序正確
+  temp_dates = pd.to_datetime(
+      st.session_state.df_meta["日期 (Date)"],
+      format="%d-%m-%Y",
+      errors="coerce",
   )
-
-  if (
-      st.session_state.selected_comp not in compounds_all
-      and len(compounds_all) > 0
-  ):
-    st.session_state.selected_comp = compounds_all[0]
+  sorted_date_indices = np.argsort(temp_dates)
+  all_unique_dates = (
+      st.session_state.df_meta["日期 (Date)"]
+      .iloc[sorted_date_indices]
+      .unique()
+      .tolist()
+  )
 
   tab_data, tab_excel, tab_plot = st.tabs([
       "  樣品檢視與對照組  ",
@@ -455,77 +414,31 @@ if not st.session_state.df_meta.empty:
   ])
 
   # -------------------------------------------------------------
-  # 分頁 1: Master-Detail (單一表格滑動)
+  # 分頁 1: 依日期先後順序，整頁向下滾動展開
   # -------------------------------------------------------------
   with tab_data:
-    col_nav, col_detail = st.columns([1.1, 3.1])
-
-    with col_nav:
-      st.markdown(
-          """
-            <div class="workspace-card" style="padding: 12px;">
-                <div class="card-header" style="margin-bottom: 8px;">樣品清單</div>
-            """,
-          unsafe_allow_html=True,
-      )
-
-      for comp in compounds_all:
-        cnt = len(
-            st.session_state.df_meta[
-                st.session_state.df_meta["化合物 (Compound)"] == comp
-            ]
-        )
-        is_active = comp == st.session_state.selected_comp
-
-        r_c1, r_c2 = st.columns([4, 1])
-        with r_c1:
-          btn_type = "primary" if is_active else "secondary"
-          if st.button(
-              f"{comp} ({cnt})",
-              key=f"nav_btn_{comp}",
-              use_container_width=True,
-              type=btn_type,
-          ):
-            st.session_state.selected_comp = comp
-            st.rerun()
-
-        with r_c2:
-          if st.button("✕", key=f"del_x_{comp}", help=f"刪除 {comp}"):
-            st.session_state.history_stack.append((
-                st.session_state.df_meta.copy(),
-                st.session_state.parsed_data.copy(),
-            ))
-
-            uids_to_remove = st.session_state.df_meta[
-                st.session_state.df_meta["化合物 (Compound)"] == comp
-            ]["UID"].tolist()
-            for uid in uids_to_remove:
-              st.session_state.parsed_data.pop(uid, None)
-
-            st.session_state.df_meta = st.session_state.df_meta[
-                st.session_state.df_meta["化合物 (Compound)"] != comp
-            ].reset_index(drop=True)
-
-            rem_comps = sorted(
-                st.session_state.df_meta["化合物 (Compound)"].unique()
-            )
-            st.session_state.selected_comp = (
-                rem_comps[0] if rem_comps else None
-            )
-            st.session_state.editor_version += 1
-            st.rerun()
-
-      st.markdown("---")
-      st.caption("全域單位快速套用")
+    st.markdown(
+        """
+        <div class="workspace-card">
+            <div class="card-header">
+                <span>全域批次操作</span>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    g_col1, g_col2, g_col3 = st.columns([2, 1.2, 1.2])
+    with g_col1:
       sel_g_unit = st.selectbox(
-          "套用單位",
+          "全域單位快速套用",
           unit_options,
           index=unit_options.index(st.session_state.global_unit)
           if st.session_state.global_unit in unit_options
           else 3,
-          label_visibility="collapsed",
       )
-      if st.button("一鍵套用全部", use_container_width=True):
+    with g_col2:
+      st.write("")
+      st.write("")
+      if st.button("一鍵套用至所有化合物", use_container_width=True):
         st.session_state.global_unit = sel_g_unit
         mask = ~st.session_state.df_meta["化合物 (Compound)"].str.lower().isin(
             ["control", "basal", "blank (water+water)", "blank (water+reagent)"]
@@ -533,92 +446,80 @@ if not st.session_state.df_meta.empty:
         st.session_state.df_meta.loc[mask, "單位 (Unit)"] = sel_g_unit
         st.session_state.editor_version += 1
         st.rerun()
-      st.markdown("</div>", unsafe_allow_html=True)
+    with g_col3:
+      st.write("")
+      st.write("")
+      r_a, r_b = st.columns(2)
+      with r_a:
+        if st.button("全部勾選", use_container_width=True):
+          st.session_state.df_meta["選取"] = True
+          st.session_state.editor_version += 1
+          st.rerun()
+      with r_b:
+        if st.button("全部取消", use_container_width=True):
+          st.session_state.df_meta["選取"] = False
+          st.session_state.editor_version += 1
+          st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with col_detail:
-      current_comp = st.session_state.selected_comp
-      if current_comp:
+    # 依日期先後順序直向排列
+    for d in all_unique_dates:
+      date_mask = st.session_state.df_meta["日期 (Date)"] == d
+      date_df = st.session_state.df_meta[date_mask]
+
+      st.markdown(
+          f"""
+            <div class="date-divider">
+                <span>🗓️ 實驗日期：{d} ({len(date_df)} 筆數據)</span>
+            </div>
+            """,
+          unsafe_allow_html=True,
+      )
+
+      d_btn1, d_btn2, _ = st.columns([1.2, 1.2, 6])
+      with d_btn1:
+        if st.button(
+            f"全選此日 ({d})", key=f"sel_date_{d}", use_container_width=True
+        ):
+          st.session_state.df_meta.loc[date_mask, "選取"] = True
+          st.session_state.editor_version += 1
+          st.rerun()
+      with d_btn2:
+        if st.button(
+            f"清除此日 ({d})", key=f"clr_date_{d}", use_container_width=True
+        ):
+          st.session_state.df_meta.loc[date_mask, "選取"] = False
+          st.session_state.editor_version += 1
+          st.rerun()
+
+      compounds_in_date = sorted(
+          date_df["化合物 (Compound)"].unique(),
+          key=lambda x: (
+              0
+              if any(
+                  k in x.lower()
+                  for k in ["basal", "control", "water+water", "water+reagent"]
+              )
+              else 1,
+              x.lower(),
+          ),
+      )
+
+      for comp in compounds_in_date:
+        comp_date_mask = date_mask & (
+            st.session_state.df_meta["化合物 (Compound)"] == comp
+        )
+        comp_df = st.session_state.df_meta[comp_date_mask]
+
         st.markdown(
             f"""
-                <div class="workspace-card">
+                <div class="workspace-card" style="margin-top: 8px;">
                     <div class="card-header">
-                        <span>當前檢視：<b>{current_comp}</b></span>
+                        <span>🧪 <b>{comp}</b> <small style='color:#64748b;'>({d})</small></span>
                     </div>
                 """,
             unsafe_allow_html=True,
         )
-
-        is_ctrl_comp = any(
-            k in current_comp.lower()
-            for k in ["basal", "control", "water+water", "water+reagent"]
-        )
-
-        h_col1, h_col2 = st.columns([2.2, 2.0])
-        with h_col1:
-          if not is_ctrl_comp:
-            cur_comp_unit = st.session_state.df_meta[
-                st.session_state.df_meta["化合物 (Compound)"] == current_comp
-            ]["單位 (Unit)"].values[0]
-            def_idx = (
-                unit_options.index(cur_comp_unit)
-                if cur_comp_unit in unit_options
-                else 3
-            )
-
-            def make_change_handler(target_comp):
-              def handler():
-                new_u = st.session_state[f"u_sel_{target_comp}"]
-                mask = (
-                    st.session_state.df_meta["化合物 (Compound)"]
-                    == target_comp
-                )
-                st.session_state.df_meta.loc[mask, "單位 (Unit)"] = new_u
-                st.session_state.editor_version += 1
-
-              return handler
-
-            st.selectbox(
-                f"變更 {current_comp} 單位:",
-                unit_options,
-                index=def_idx,
-                key=f"u_sel_{current_comp}",
-                on_change=make_change_handler(current_comp),
-            )
-
-        with h_col2:
-          st.write("")
-          st.write("")
-          c_sub1, c_sub2 = st.columns(2)
-          with c_sub1:
-            if st.button(
-                "全選此樣品",
-                key=f"sel_all_{current_comp}",
-                use_container_width=True,
-            ):
-              mask = (
-                  st.session_state.df_meta["化合物 (Compound)"]
-                  == current_comp
-              )
-              st.session_state.df_meta.loc[mask, "選取"] = True
-              st.session_state.editor_version += 1
-              st.rerun()
-          with c_sub2:
-            if st.button(
-                "清除此樣品",
-                key=f"clr_all_{current_comp}",
-                use_container_width=True,
-            ):
-              mask = (
-                  st.session_state.df_meta["化合物 (Compound)"]
-                  == current_comp
-              )
-              st.session_state.df_meta.loc[mask, "選取"] = False
-              st.session_state.editor_version += 1
-              st.rerun()
-
-        comp_df = st.session_state.df_meta[
-            st.session_state.df_meta["化合物 (Compound)"] == current_comp
-        ]
 
         edited_comp = st.data_editor(
             comp_df,
@@ -630,21 +531,25 @@ if not st.session_state.df_meta.empty:
                 "化合物 (Compound)": st.column_config.TextColumn(
                     "化合物名稱", required=True
                 ),
+                "樣品名稱 (Sample)": st.column_config.TextColumn(
+                    "原始樣品名稱"
+                ),
+                "劑量 (Dose)": st.column_config.TextColumn("劑量"),
                 "單位 (Unit)": st.column_config.SelectboxColumn(
                     "單位", options=unit_options, required=True
                 ),
                 "後綴 (Suffix)": st.column_config.TextColumn("標籤備註 (後綴)"),
+                "來源檔名": st.column_config.TextColumn("來源檔名"),
             },
             disabled=["日期 (Date)", "測量時間", "來源檔名"],
             use_container_width=True,
             hide_index=True,
-            key=f"editor_{current_comp}_all_v{st.session_state.editor_version}",
+            key=f"editor_{d}_{comp}_v{st.session_state.editor_version}",
         )
         st.session_state.df_meta.update(edited_comp)
-
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # 每日對照組基準
+    # 每日對照組基準綁定
     st.markdown(
         """
         <div class="workspace-card">
@@ -653,12 +558,24 @@ if not st.session_state.df_meta.empty:
         unsafe_allow_html=True,
     )
     anchor_settings = {}
-    cols = st.columns(len(unique_dates) if len(unique_dates) > 0 else 1)
+    selected_df_curr = st.session_state.df_meta[
+        st.session_state.df_meta["選取"] == True
+    ]
+    unique_active_dates = [
+        d
+        for d in all_unique_dates
+        if d in selected_df_curr["日期 (Date)"].values
+    ]
+    cols = st.columns(
+        len(unique_active_dates) if len(unique_active_dates) > 0 else 1
+    )
 
-    for idx, date in enumerate(unique_dates):
+    for idx, date in enumerate(unique_active_dates):
       with cols[idx]:
         st.markdown(f"**日期: `{date}`**")
-        date_samples = selected_df[selected_df["日期 (Date)"] == date]
+        date_samples = selected_df_curr[
+            selected_df_curr["日期 (Date)"] == date
+        ]
         options = date_samples["UID"].tolist()
         display_names = [
             f"{r['樣品名稱 (Sample)']} ({r['測量時間']})"
@@ -704,6 +621,9 @@ if not st.session_state.df_meta.empty:
   # -------------------------------------------------------------
   # 分頁 2: 結算與匯出 Excel
   # -------------------------------------------------------------
+  selected_df = st.session_state.df_meta[
+      st.session_state.df_meta["選取"] == True
+  ]
   with tab_excel:
     st.markdown(
         """
@@ -724,243 +644,249 @@ if not st.session_state.df_meta.empty:
       )
 
     if st.button("開始計算並建置 Excel 總表", use_container_width=True):
-      calc_dict = {}
-      for _, row in selected_df.iterrows():
-        uid = row["UID"]
-        df_points = st.session_state.parsed_data[uid]["df"]
-        ch_idx = st.session_state.parsed_data[uid]["ch_idx"]
-
-        target_min = t_start + (ch_idx - 1) * t_interval
-        target_max = target_min + t_react
-
-        val_min = df_points.iloc[
-            (df_points["Time"] - target_min).abs().idxmin()
-        ]["Abs"]
-        val_max = df_points.iloc[
-            (df_points["Time"] - target_max).abs().idxmin()
-        ]["Abs"]
-        calc_dict[uid] = {
-            "min": val_min,
-            "max": val_max,
-            "diff": val_max - val_min,
-        }
-
-      compounds = [
-          c
-          for c in selected_df["化合物 (Compound)"].unique()
-          if not any(
-              k in c.lower()
-              for k in ["control", "basal", "water+water", "water+reagent"]
-          )
-      ]
-
-      if existing_excel:
-        wb = openpyxl.load_workbook(existing_excel)
+      if selected_df.empty:
+        st.warning("請先在第一頁勾選欲結算的樣品！")
       else:
-        wb = openpyxl.Workbook()
-        if "Sheet" in wb.sheetnames and len(wb.sheetnames) == 1:
-          wb.remove(wb["Sheet"])
+        calc_dict = {}
+        for _, row in selected_df.iterrows():
+          uid = row["UID"]
+          df_points = st.session_state.parsed_data[uid]["df"]
+          ch_idx = st.session_state.parsed_data[uid]["ch_idx"]
 
-      tnr_font = Font(name="Times New Roman", size=12)
-      tnr_bold = Font(name="Times New Roman", size=12, bold=True)
-      gray_fill = PatternFill(
-          start_color="E8E8E8", end_color="E8E8E8", fill_type="solid"
-      )
+          target_min = t_start + (ch_idx - 1) * t_interval
+          target_max = target_min + t_react
 
-      for comp in compounds:
-        clean_sheet_title = re.sub(r"[\:\\/\?\*\[\]]", "_", str(comp))[
-            :31
-        ].strip()
-        if not clean_sheet_title:
-          clean_sheet_title = "Sheet"
+          val_min = df_points.iloc[
+              (df_points["Time"] - target_min).abs().idxmin()
+          ]["Abs"]
+          val_max = df_points.iloc[
+              (df_points["Time"] - target_max).abs().idxmin()
+          ]["Abs"]
+          calc_dict[uid] = {
+              "min": val_min,
+              "max": val_max,
+              "diff": val_max - val_min,
+          }
 
-        comp_df = selected_df[selected_df["化合物 (Compound)"] == comp]
-        comp_dates = sorted(comp_df["日期 (Date)"].unique())
-        processed_rows = []
-
-        for d in comp_dates:
-          c_uid = anchor_settings[d]["Control"]
-          c_info = selected_df[selected_df["UID"] == c_uid].iloc[0]
-          c_diff = calc_dict[c_uid]["diff"]
-
-          if not is_superoxide:
-            b_uid = anchor_settings[d]["Basal"]
-            b_info = selected_df[selected_df["UID"] == b_uid].iloc[0]
-            b_diff = calc_dict[b_uid]["diff"]
-            processed_rows.append([
-                d,
-                b_info["來源檔名"],
-                "basal",
-                round(calc_dict[b_uid]["min"], 4),
-                round(calc_dict[b_uid]["max"], 4),
-                round(b_diff, 4),
-                0.0,
-                "0.00%",
-                "-",
-            ])
-
-          if is_superoxide:
-            processed_rows.append([
-                d,
-                c_info["來源檔名"],
-                "control",
-                round(calc_dict[c_uid]["min"], 4),
-                round(calc_dict[c_uid]["max"], 4),
-                round(c_diff, 4),
-                round(c_diff * 47.4, 4),
-                "100.00%",
-                "0.00%",
-            ])
-          else:
-            c_net = c_diff - b_diff
-            processed_rows.append([
-                d,
-                c_info["來源檔名"],
-                "control",
-                round(calc_dict[c_uid]["min"], 4),
-                round(calc_dict[c_uid]["max"], 4),
-                round(c_diff, 4),
-                round(c_net, 4),
-                "100.00%",
-                "0.00%",
-            ])
-
-          date_comp_df = comp_df[comp_df["日期 (Date)"] == d]
-          date_drug_rows = []
-
-          for _, row in date_comp_df.iterrows():
-            uid = row["UID"]
-            s_diff = calc_dict[uid]["diff"]
-            suffix_str = str(row["後綴 (Suffix)"]).strip() if pd.notna(row["後綴 (Suffix)"]) else ""
-            has_special_suffix = bool(suffix_str)
-
-            label_text = build_sample_label(
-                comp, row["劑量 (Dose)"], row["單位 (Unit)"], suffix_str
+        compounds = [
+            c
+            for c in selected_df["化合物 (Compound)"].unique()
+            if not any(
+                k in c.lower()
+                for k in ["control", "basal", "water+water", "water+reagent"]
             )
+        ]
 
-            d_val = (
-                float(row["劑量 (Dose)"])
-                if str(row["劑量 (Dose)"]).replace(".", "", 1).isdigit()
-                else float("inf")
-            )
-            sort_weight = (
-                (2, d_val, label_text)
-                if has_special_suffix
-                else (1, d_val, label_text)
-            )
+        if existing_excel:
+          wb = openpyxl.load_workbook(existing_excel)
+        else:
+          wb = openpyxl.Workbook()
+          if "Sheet" in wb.sheetnames and len(wb.sheetnames) == 1:
+            wb.remove(wb["Sheet"])
+
+        tnr_font = Font(name="Times New Roman", size=12)
+        tnr_bold = Font(name="Times New Roman", size=12, bold=True)
+        gray_fill = PatternFill(
+            start_color="E8E8E8", end_color="E8E8E8", fill_type="solid"
+        )
+
+        for comp in compounds:
+          clean_sheet_title = re.sub(r"[\:\\/\?\*\[\]]", "_", str(comp))[
+              :31
+          ].strip()
+          if not clean_sheet_title:
+            clean_sheet_title = "Sheet"
+
+          comp_df = selected_df[selected_df["化合物 (Compound)"] == comp]
+          comp_dates = sorted(comp_df["日期 (Date)"].unique())
+          processed_rows = []
+
+          for d in comp_dates:
+            if d not in anchor_settings:
+              continue
+            c_uid = anchor_settings[d]["Control"]
+            c_info = selected_df[selected_df["UID"] == c_uid].iloc[0]
+            c_diff = calc_dict[c_uid]["diff"]
+
+            if not is_superoxide:
+              b_uid = anchor_settings[d]["Basal"]
+              b_info = selected_df[selected_df["UID"] == b_uid].iloc[0]
+              b_diff = calc_dict[b_uid]["diff"]
+              processed_rows.append([
+                  d,
+                  b_info["來源檔名"],
+                  "basal",
+                  round(calc_dict[b_uid]["min"], 4),
+                  round(calc_dict[b_uid]["max"], 4),
+                  round(b_diff, 4),
+                  0.0,
+                  "0.00%",
+                  "-",
+              ])
 
             if is_superoxide:
-              s_474 = s_diff * 47.4
-              c_474 = c_diff * 47.4 if c_diff != 0 else 1.0
-              rel = (s_474 / c_474) * 100
-              inh = 100 - rel
-              date_drug_rows.append((
-                  sort_weight,
-                  [
-                      d,
-                      row["來源檔名"],
-                      label_text,
-                      round(calc_dict[uid]["min"], 4),
-                      round(calc_dict[uid]["max"], 4),
-                      round(s_diff, 4),
-                      round(s_474, 4),
-                      f"{rel:.2f}%"
-                      if not has_special_suffix
-                      else "- (Reference)",
-                      f"{inh:.2f}%"
-                      if not has_special_suffix
-                      else "- (Reference)",
-                  ],
-              ))
+              processed_rows.append([
+                  d,
+                  c_info["來源檔名"],
+                  "control",
+                  round(calc_dict[c_uid]["min"], 4),
+                  round(calc_dict[c_uid]["max"], 4),
+                  round(c_diff, 4),
+                  round(c_diff * 47.4, 4),
+                  "100.00%",
+                  "0.00%",
+              ])
             else:
-              s_net = s_diff - b_diff
-              c_net = c_diff - b_diff if (c_diff - b_diff) != 0 else 1.0
-              rel = (s_net / c_net) * 100
-              inh = 100 - rel
-              date_drug_rows.append((
-                  sort_weight,
-                  [
-                      d,
-                      row["來源檔名"],
-                      label_text,
-                      round(calc_dict[uid]["min"], 4),
-                      round(calc_dict[uid]["max"], 4),
-                      round(s_diff, 4),
-                      round(s_net, 4),
-                      f"{rel:.2f}%"
-                      if not has_special_suffix
-                      else "- (Reference)",
-                      f"{inh:.2f}%"
-                      if not has_special_suffix
-                      else "- (Reference)",
-                  ],
-              ))
+              c_net = c_diff - b_diff
+              processed_rows.append([
+                  d,
+                  c_info["來源檔名"],
+                  "control",
+                  round(calc_dict[c_uid]["min"], 4),
+                  round(calc_dict[c_uid]["max"], 4),
+                  round(c_diff, 4),
+                  round(c_net, 4),
+                  "100.00%",
+                  "0.00%",
+              ])
 
-          date_drug_rows.sort(key=lambda x: x[0])
-          processed_rows.extend([r[1] for r in date_drug_rows])
+            date_comp_df = comp_df[comp_df["日期 (Date)"] == d]
+            date_drug_rows = []
 
-        if clean_sheet_title in wb.sheetnames:
-          ws = wb[clean_sheet_title]
-          for r_vals in processed_rows:
-            ws.append(r_vals)
-        else:
-          ws = wb.create_sheet(title=clean_sheet_title)
-          headers = [
-              "Date",
-              "File Name",
-              "Sample",
-              "Min",
-              "Max",
-              "Max - Min",
-              "*47.4" if is_superoxide else "Max - Min - Basal",
-              "Release (%)",
-              "Inhibition (%)",
-          ]
-          ws.append([f"Assay: {assay_type}", f"Compound: {comp}", "", ""])
-          ws.append([
-              f"Cell: {meta_cell}",
-              f"Stimulant: {meta_stim}",
-              f"Amplifier: {meta_amp}",
-              f"Substrate: {meta_sub}",
-          ])
-          ws.append([""] * len(headers))
-          ws.append(headers)
+            for _, row in date_comp_df.iterrows():
+              uid = row["UID"]
+              s_diff = calc_dict[uid]["diff"]
+              suffix_str = str(row["後綴 (Suffix)"]).strip() if pd.notna(row["後綴 (Suffix)"]) else ""
+              has_special_suffix = bool(suffix_str)
 
-          for r_vals in processed_rows:
-            ws.append(r_vals)
+              label_text = build_sample_label(
+                  comp, row["劑量 (Dose)"], row["單位 (Unit)"], suffix_str
+              )
+              try:
+                d_val = float(row["劑量 (Dose)"])
+              except ValueError:
+                d_val = float("inf")
 
-          for cell in ws[4]:
-            cell.fill = gray_fill
-            cell.font = tnr_bold
+              sort_weight = (
+                  (2, d_val, label_text)
+                  if has_special_suffix
+                  else (1, d_val, label_text)
+              )
 
-        for row in ws.iter_rows():
-          for cell in row:
-            if not cell.font or cell.font.name != "Times New Roman":
-              cell.font = tnr_font
-            cell.alignment = Alignment(horizontal="center", vertical="center")
+              if is_superoxide:
+                s_474 = s_diff * 47.4
+                c_474 = c_diff * 47.4 if c_diff != 0 else 1.0
+                rel = (s_474 / c_474) * 100
+                inh = 100 - rel
+                date_drug_rows.append((
+                    sort_weight,
+                    [
+                        d,
+                        row["來源檔名"],
+                        label_text,
+                        round(calc_dict[uid]["min"], 4),
+                        round(calc_dict[uid]["max"], 4),
+                        round(s_diff, 4),
+                        round(s_474, 4),
+                        f"{rel:.2f}%"
+                        if not has_special_suffix
+                        else "- (Reference)",
+                        f"{inh:.2f}%"
+                        if not has_special_suffix
+                        else "- (Reference)",
+                    ],
+                ))
+              else:
+                s_net = s_diff - b_diff
+                c_net = c_diff - b_diff if (c_diff - b_diff) != 0 else 1.0
+                rel = (s_net / c_net) * 100
+                inh = 100 - rel
+                date_drug_rows.append((
+                    sort_weight,
+                    [
+                        d,
+                        row["來源檔名"],
+                        label_text,
+                        round(calc_dict[uid]["min"], 4),
+                        round(calc_dict[uid]["max"], 4),
+                        round(s_diff, 4),
+                        round(s_net, 4),
+                        f"{rel:.2f}%"
+                        if not has_special_suffix
+                        else "- (Reference)",
+                        f"{inh:.2f}%"
+                        if not has_special_suffix
+                        else "- (Reference)",
+                    ],
+                ))
 
-        for col in ws.columns:
-          max_len = max(len(str(cell.value or "")) for cell in col)
-          col_letter = col[0].column_letter
-          ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
+            date_drug_rows.sort(key=lambda x: x[0])
+            processed_rows.extend([r[1] for r in date_drug_rows])
 
-      out_stream = io.BytesIO()
-      wb.save(out_stream)
+          if clean_sheet_title in wb.sheetnames:
+            ws = wb[clean_sheet_title]
+            for r_vals in processed_rows:
+              ws.append(r_vals)
+          else:
+            ws = wb.create_sheet(title=clean_sheet_title)
+            headers = [
+                "Date",
+                "File Name",
+                "Sample",
+                "Min",
+                "Max",
+                "Max - Min",
+                "*47.4" if is_superoxide else "Max - Min - Basal",
+                "Release (%)",
+                "Inhibition (%)",
+            ]
+            ws.append([f"Assay: {assay_type}", f"Compound: {comp}", "", ""])
+            ws.append([
+                f"Cell: {meta_cell}",
+                f"Stimulant: {meta_stim}",
+                f"Amplifier: {meta_amp}",
+                f"Substrate: {meta_sub}",
+            ])
+            ws.append([""] * len(headers))
+            ws.append(headers)
 
-      st.download_button(
-          "下載結構化 Excel 試算表 (.xlsx)",
-          data=out_stream.getvalue(),
-          file_name=out_filename
-          if out_filename.endswith(".xlsx")
-          else f"{out_filename}.xlsx",
-          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          use_container_width=True,
-      )
-      st.success("計算完成並已建立 Excel 工作簿。")
+            for r_vals in processed_rows:
+              ws.append(r_vals)
+
+            for cell in ws[4]:
+              cell.fill = gray_fill
+              cell.font = tnr_bold
+
+          for row in ws.iter_rows():
+            for cell in row:
+              if not cell.font or cell.font.name != "Times New Roman":
+                cell.font = tnr_font
+              cell.alignment = Alignment(
+                  horizontal="center", vertical="center"
+              )
+
+          for col in ws.columns:
+            max_len = max(len(str(cell.value or "")) for cell in col)
+            col_letter = col[0].column_letter
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
+
+        out_stream = io.BytesIO()
+        wb.save(out_stream)
+
+        st.download_button(
+            "下載結構化 Excel 試算表 (.xlsx)",
+            data=out_stream.getvalue(),
+            file_name=out_filename
+            if out_filename.endswith(".xlsx")
+            else f"{out_filename}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+        st.success("計算完成並已建立 Excel 工作簿。")
     st.markdown("</div>", unsafe_allow_html=True)
 
   # -------------------------------------------------------------
-  # 分頁 3: Split-View 動力學繪圖
+  # 分頁 3: 動力學繪圖
   # -------------------------------------------------------------
   with tab_plot:
     plot_mode = st.radio(
@@ -989,7 +915,7 @@ if not st.session_state.df_meta.empty:
       all_uids_a = non_ctrl_samples["UID"].tolist()
 
       if "selected_uids_a" not in st.session_state:
-        st.session_state.selected_uids_a = all_uids_a
+        st.session_state.selected_uids_a = all_uids_a.copy()
 
       with col_pick_a:
         st.markdown(
@@ -1002,17 +928,22 @@ if not st.session_state.df_meta.empty:
 
         b_c1, b_c2 = st.columns(2)
         with b_c1:
-          if st.button("全選", use_container_width=True, key="btn_all_a"):
-            st.session_state.selected_uids_a = all_uids_a
+          if st.button("全部選取", use_container_width=True, key="btn_all_a"):
+            st.session_state.selected_uids_a = all_uids_a.copy()
             st.rerun()
         with b_c2:
-          if st.button("清除", use_container_width=True, key="btn_clr_a"):
+          if st.button(
+              "全部取消 (清除)", use_container_width=True, key="btn_clr_a"
+          ):
             st.session_state.selected_uids_a = []
             st.rerun()
 
         checked_a = []
-        for d in sorted(non_ctrl_samples["日期 (Date)"].unique()):
-          with st.expander(f"日期：{d}", expanded=True):
+        for d in sorted(
+            non_ctrl_samples["日期 (Date)"].unique(),
+            key=lambda x: pd.to_datetime(x, format="%d-%m-%Y", errors="coerce"),
+        ):
+          with st.expander(f"🗓️ 日期：{d}", expanded=True):
             date_sub = non_ctrl_samples[non_ctrl_samples["日期 (Date)"] == d]
             for _, row in date_sub.iterrows():
               uid = row["UID"]
@@ -1035,116 +966,150 @@ if not st.session_state.df_meta.empty:
         st.markdown(
             """
                 <div class="workspace-card">
-                    <div class="card-header">即時預覽與批量匯出</div>
+                    <div class="card-header">即時預覽勾選樣品</div>
                 """,
             unsafe_allow_html=True,
         )
 
         if checked_a:
-          preview_uid = checked_a[0]
-          p_row = selected_df[selected_df["UID"] == preview_uid].iloc[0]
-          p_d = p_row["日期 (Date)"]
-          p_comp = p_row["化合物 (Compound)"]
-          p_label = build_sample_label(
-              p_comp,
-              p_row["劑量 (Dose)"],
-              p_row["單位 (Unit)"],
-              p_row["後綴 (Suffix)"],
-          )
-
-          fig, ax = plt.subplots(figsize=(8.5, 4.8), dpi=150)
-          if not is_superoxide:
-            b_uid = anchor_settings[p_d]["Basal"]
-            b_df = st.session_state.parsed_data[b_uid]["df"]
-            ax.plot(
-                b_df["Time"],
-                b_df["Abs"],
-                label="Basal (basal)",
-                color="#2ca02c",
-                linewidth=1.8,
+          for preview_uid in checked_a:
+            p_row = selected_df[selected_df["UID"] == preview_uid].iloc[0]
+            p_d = p_row["日期 (Date)"]
+            p_comp = p_row["化合物 (Compound)"]
+            p_label = build_sample_label(
+                p_comp,
+                p_row["劑量 (Dose)"],
+                p_row["單位 (Unit)"],
+                p_row["後綴 (Suffix)"],
             )
 
-          c_uid = anchor_settings[p_d]["Control"]
-          c_df = st.session_state.parsed_data[c_uid]["df"]
-          ax.plot(
-              c_df["Time"],
-              c_df["Abs"],
-              label="Control (control)",
-              color="#d62728",
-              linewidth=2.0,
-          )
+            fig, ax = plt.subplots(figsize=(8.5, 4.8), dpi=150)
+            sources = []
 
-          s_df = st.session_state.parsed_data[preview_uid]["df"]
-          ax.plot(
-              s_df["Time"],
-              s_df["Abs"],
-              label=f"{p_label}",
-              color="#1f77b4",
-              linewidth=2.0,
-          )
+            if not is_superoxide and p_d in anchor_settings:
+              b_uid = anchor_settings[p_d]["Basal"]
+              b_row = selected_df[selected_df["UID"] == b_uid].iloc[0]
+              b_df = st.session_state.parsed_data[b_uid]["df"]
+              ax.plot(
+                  b_df["Time"],
+                  b_df["Abs"],
+                  label="Basal (basal)",
+                  color="#2ca02c",
+                  linewidth=1.8,
+              )
+              sources.append(
+                  f" • Basal: {b_row['來源檔名']} ({b_row['測量時間']})"
+              )
 
-          # 加藥輔助線
-          ax.axvline(x=120, color="#94a3b8", linestyle=":", alpha=0.7)
-          ax.axvline(x=240, color="#94a3b8", linestyle=":", alpha=0.7)
-          ax.axvline(x=420, color="#94a3b8", linestyle=":", alpha=0.7)
+            if p_d in anchor_settings:
+              c_uid = anchor_settings[p_d]["Control"]
+              c_row = selected_df[selected_df["UID"] == c_uid].iloc[0]
+              c_df = st.session_state.parsed_data[c_uid]["df"]
+              ax.plot(
+                  c_df["Time"],
+                  c_df["Abs"],
+                  label="Control (control)",
+                  color="#d62728",
+                  linewidth=2.0,
+              )
+              sources.append(
+                  f" • Control: {c_row['來源檔名']} ({c_row['測量時間']})"
+              )
 
-          # 頂部留白與邊界外加藥標記（避免被圖例遮擋）
-          ax.margins(y=0.15)
-          ax.text(
-              120,
-              1.01,
-              "Drug (2')",
-              transform=ax.get_xaxis_transform(),
-              fontsize=8.5,
-              color="#475569",
-              ha="center",
-              va="bottom",
-              fontweight="bold",
-          )
-          ax.text(
-              240,
-              1.01,
-              "CB (4')",
-              transform=ax.get_xaxis_transform(),
-              fontsize=8.5,
-              color="#475569",
-              ha="center",
-              va="bottom",
-              fontweight="bold",
-          )
-          ax.text(
-              420,
-              1.01,
-              "fMLF (7')",
-              transform=ax.get_xaxis_transform(),
-              fontsize=8.5,
-              color="#475569",
-              ha="center",
-              va="bottom",
-              fontweight="bold",
-          )
+            s_df = st.session_state.parsed_data[preview_uid]["df"]
+            ax.plot(
+                s_df["Time"],
+                s_df["Abs"],
+                label=f"{p_label}",
+                color="#1f77b4",
+                linewidth=2.0,
+            )
+            sources.append(
+                f" • Sample: {p_row['來源檔名']} ({p_row['測量時間']})"
+            )
 
-          ax.set_xlabel("Time (s)", fontweight="bold")
-          ax.set_ylabel(ylabel_text, fontweight="bold")
-          ax.set_title(
-              f"預覽第一張圖：{assay_label} - {p_label} ({p_d})",
-              fontsize=11,
-              fontweight="bold",
-              pad=18,
-          )
-          ax.legend(
-              frameon=True,
-              facecolor="white",
-              edgecolor="#cbd5e1",
-              fontsize=8.5,
-              loc="upper left",
-          )
-          ax.grid(True, linestyle="--", alpha=0.3)
-          st.pyplot(fig)
-          plt.close(fig)
+            ax.axvline(x=120, color="#94a3b8", linestyle=":", alpha=0.7)
+            ax.axvline(x=240, color="#94a3b8", linestyle=":", alpha=0.7)
+            ax.axvline(x=420, color="#94a3b8", linestyle=":", alpha=0.7)
+
+            ax.margins(y=0.15)
+            ax.text(
+                120,
+                1.01,
+                "Drug (2')",
+                transform=ax.get_xaxis_transform(),
+                fontsize=8.5,
+                color="#475569",
+                ha="center",
+                va="bottom",
+                fontweight="bold",
+            )
+            ax.text(
+                240,
+                1.01,
+                "CB (4')",
+                transform=ax.get_xaxis_transform(),
+                fontsize=8.5,
+                color="#475569",
+                ha="center",
+                va="bottom",
+                fontweight="bold",
+            )
+            ax.text(
+                420,
+                1.01,
+                "fMLF (7')",
+                transform=ax.get_xaxis_transform(),
+                fontsize=8.5,
+                color="#475569",
+                ha="center",
+                va="bottom",
+                fontweight="bold",
+            )
+
+            ax.set_xlabel("Time (s)", fontweight="bold")
+            ax.set_ylabel(ylabel_text, fontweight="bold")
+            ax.set_title(
+                f"{assay_label}: {p_label} ({p_d})",
+                fontsize=11,
+                fontweight="bold",
+                pad=18,
+            )
+            ax.legend(
+                frameon=True,
+                facecolor="white",
+                edgecolor="#cbd5e1",
+                fontsize=8.5,
+                loc="upper left",
+            )
+            ax.grid(True, linestyle="--", alpha=0.3)
+
+            # 動態調整底邊距，避免遮蔽 X 軸
+            source_box_str = "Source Files:\n" + "\n".join(sources)
+            line_cnt = len(sources) + 1
+            bottom_margin = max(0.22, 0.10 + 0.035 * line_cnt)
+            plt.subplots_adjust(bottom=bottom_margin)
+
+            fig.text(
+                0.12,
+                0.02,
+                source_box_str,
+                fontsize=7.5,
+                color="#444444",
+                ha="left",
+                va="bottom",
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor="#f9f9f9",
+                    edgecolor="#dddddd",
+                    alpha=0.8,
+                ),
+            )
+            st.pyplot(fig)
+            plt.close(fig)
 
           if st.button(
-              f"批量生成並打包全部 ({len(checked_a)} 張圖表)",
+              f"📦 批量生成並打包全部 ({len(checked_a)} 張高解析圖表)",
               use_container_width=True,
           ):
             zip_buffer = io.BytesIO()
@@ -1165,7 +1130,7 @@ if not st.session_state.df_meta.empty:
                 fig, ax = plt.subplots(figsize=(9.5, 6.2), dpi=300)
                 sources = []
 
-                if not is_superoxide:
+                if not is_superoxide and d in anchor_settings:
                   b_uid = anchor_settings[d]["Basal"]
                   b_row = selected_df[selected_df["UID"] == b_uid].iloc[0]
                   b_df = st.session_state.parsed_data[b_uid]["df"]
@@ -1180,19 +1145,20 @@ if not st.session_state.df_meta.empty:
                       f" • Basal: {b_row['來源檔名']} ({b_row['測量時間']})"
                   )
 
-                c_uid = anchor_settings[d]["Control"]
-                c_row = selected_df[selected_df["UID"] == c_uid].iloc[0]
-                c_df = st.session_state.parsed_data[c_uid]["df"]
-                ax.plot(
-                    c_df["Time"],
-                    c_df["Abs"],
-                    label="Control (control)",
-                    color="#d62728",
-                    linewidth=2.2,
-                )
-                sources.append(
-                    f" • Control: {c_row['來源檔名']} ({c_row['測量時間']})"
-                )
+                if d in anchor_settings:
+                  c_uid = anchor_settings[d]["Control"]
+                  c_row = selected_df[selected_df["UID"] == c_uid].iloc[0]
+                  c_df = st.session_state.parsed_data[c_uid]["df"]
+                  ax.plot(
+                      c_df["Time"],
+                      c_df["Abs"],
+                      label="Control (control)",
+                      color="#d62728",
+                      linewidth=2.2,
+                  )
+                  sources.append(
+                      f" • Control: {c_row['來源檔名']} ({c_row['測量時間']})"
+                  )
 
                 s_df = st.session_state.parsed_data[uid]["df"]
                 ax.plot(
@@ -1206,12 +1172,10 @@ if not st.session_state.df_meta.empty:
                     f" • Sample: {row['來源檔名']} ({row['測量時間']})"
                 )
 
-                # 加藥輔助線
                 ax.axvline(x=120, color="#94a3b8", linestyle=":", alpha=0.7)
                 ax.axvline(x=240, color="#94a3b8", linestyle=":", alpha=0.7)
                 ax.axvline(x=420, color="#94a3b8", linestyle=":", alpha=0.7)
 
-                # 頂部留白與頂部邊框外標記
                 ax.margins(y=0.15)
                 ax.text(
                     120,
@@ -1266,14 +1230,18 @@ if not st.session_state.df_meta.empty:
                 )
 
                 source_box_str = "Source Files:\n" + "\n".join(sources)
+                line_cnt = len(sources) + 1
+                bottom_margin = max(0.20, 0.08 + 0.03 * line_cnt)
+                plt.subplots_adjust(bottom=bottom_margin)
+
                 fig.text(
-                    0.13,
-                    -0.02,
+                    0.12,
+                    0.02,
                     source_box_str,
                     fontsize=8,
                     color="#444444",
                     ha="left",
-                    va="top",
+                    va="bottom",
                     bbox=dict(
                         boxstyle="round,pad=0.3",
                         facecolor="#f9f9f9",
@@ -1336,36 +1304,84 @@ if not st.session_state.df_meta.empty:
         st.markdown(
             """
                 <div class="workspace-card" style="padding: 12px;">
-                    <div class="card-header" style="margin-bottom: 8px;">自由疊圖清單</div>
+                    <div class="card-header" style="margin-bottom: 8px;">自由疊圖清單 (依藥物與日期)</div>
                 """,
             unsafe_allow_html=True,
         )
 
-        for comp in compounds_all:
+        all_comps_b = sorted(
+            selected_df["化合物 (Compound)"].unique(),
+            key=lambda x: (
+                0
+                if any(
+                    k in x.lower()
+                    for k in ["basal", "control", "water+water", "water+reagent"]
+                )
+                else 1,
+                x.lower(),
+            ),
+        )
+
+        for comp in all_comps_b:
           comp_sub = selected_df[selected_df["化合物 (Compound)"] == comp]
           comp_uids = comp_sub["UID"].tolist()
 
-          with st.expander(f"{comp} ({len(comp_uids)})", expanded=False):
-            for _, r in comp_sub.iterrows():
-              u = r["UID"]
-              chk_k = f"chk_b_comp_{u}"
-              r_c1, r_c2 = st.columns([2.5, 1.8])
-              with r_c1:
-                lbl = f"{r['樣品名稱 (Sample)']} ({r['日期 (Date)']})"
-                is_checked = st.checkbox(
-                    lbl, value=st.session_state.get(chk_k, False), key=chk_k
-                )
-              with r_c2:
-                sub_target = st.selectbox(
-                    "扣除",
-                    sub_opts,
-                    index=0,
-                    format_func=lambda x: names_map.get(x, x),
-                    key=f"sub_sel_{u}",
-                    label_visibility="collapsed",
-                )
-              if is_checked:
-                selected_plot_pairs.append((u, sub_target))
+          with st.expander(f"🧪 {comp} ({len(comp_uids)})", expanded=False):
+            comp_dates = sorted(
+                comp_sub["日期 (Date)"].unique(),
+                key=lambda x: pd.to_datetime(
+                    x, format="%d-%m-%Y", errors="coerce"
+                ),
+            )
+            for d_b in comp_dates:
+              date_comp_sub = comp_sub[comp_sub["日期 (Date)"] == d_b]
+              st.markdown(
+                  f"<div style='font-size:12px; font-weight:700;"
+                  f" color:#0369a1; margin-top:4px;'>🗓️ {d_b}</div>",
+                  unsafe_allow_html=True,
+              )
+
+              # 提供該日期專屬的批量操作
+              q_c1, q_c2 = st.columns(2)
+              with q_c1:
+                if st.button(
+                    "全選此日",
+                    key=f"b_all_{comp}_{d_b}",
+                    use_container_width=True,
+                ):
+                  for u in date_comp_sub["UID"].tolist():
+                    st.session_state[f"chk_b_comp_{u}"] = True
+                  st.rerun()
+              with q_c2:
+                if st.button(
+                    "清除此日",
+                    key=f"b_clr_{comp}_{d_b}",
+                    use_container_width=True,
+                ):
+                  for u in date_comp_sub["UID"].tolist():
+                    st.session_state[f"chk_b_comp_{u}"] = False
+                  st.rerun()
+
+              for _, r in date_comp_sub.iterrows():
+                u = r["UID"]
+                chk_k = f"chk_b_comp_{u}"
+                r_c1, r_c2 = st.columns([2.5, 1.8])
+                with r_c1:
+                  lbl = f"{r['樣品名稱 (Sample)']} ({r['測量時間']})"
+                  is_checked = st.checkbox(
+                      lbl, value=st.session_state.get(chk_k, False), key=chk_k
+                  )
+                with r_c2:
+                  sub_target = st.selectbox(
+                      "扣除",
+                      sub_opts,
+                      index=0,
+                      format_func=lambda x: names_map.get(x, x),
+                      key=f"sub_sel_{u}",
+                      label_visibility="collapsed",
+                  )
+                if is_checked:
+                  selected_plot_pairs.append((u, sub_target))
 
         st.caption(f"已選取 {len(selected_plot_pairs)} 條曲線")
         st.markdown("</div>", unsafe_allow_html=True)
@@ -1380,7 +1396,7 @@ if not st.session_state.df_meta.empty:
         )
 
         if selected_plot_pairs:
-          fig, ax = plt.subplots(figsize=(9, 5.2), dpi=150)
+          fig, ax = plt.subplots(figsize=(9, 5.5), dpi=150)
           high_contrast_colors = [
               "#1f77b4",
               "#d62728",
@@ -1492,12 +1508,10 @@ if not st.session_state.df_meta.empty:
                   fontsize=8,
               )
 
-          # 加藥輔助線
           ax.axvline(x=120, color="#94a3b8", linestyle=":", alpha=0.7)
           ax.axvline(x=240, color="#94a3b8", linestyle=":", alpha=0.7)
           ax.axvline(x=420, color="#94a3b8", linestyle=":", alpha=0.7)
 
-          # 頂部留白與頂部邊框外標記
           ax.margins(y=0.15)
           ax.text(
               120,
@@ -1545,12 +1559,19 @@ if not st.session_state.df_meta.empty:
           ax.spines["right"].set_visible(False)
           ax.grid(True, linestyle="--", alpha=0.4)
 
+          # 動態調整底部邊界以容納多行來源，徹底避開 X 軸
+          source_cnt = len(source_texts) + 1
+          bot_padding = max(0.20, min(0.48, 0.08 + 0.025 * source_cnt))
+          plt.subplots_adjust(bottom=bot_padding)
+
           fig.text(
               0.12,
-              -0.08,
+              0.02,
               "Source Files:\n" + "\n".join(source_texts),
               fontsize=7.5,
               color="#444444",
+              ha="left",
+              va="bottom",
               bbox=dict(
                   facecolor="#f9f9f9",
                   edgecolor="#dddddd",
