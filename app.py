@@ -29,6 +29,8 @@ if "global_unit" not in st.session_state:
   st.session_state.global_unit = "mg/ml"
 if "editor_version" not in st.session_state:
   st.session_state.editor_version = 0
+if "selected_comp" not in st.session_state:
+  st.session_state.selected_comp = None
 if "history_stack" not in st.session_state:
   st.session_state.history_stack = []
 
@@ -68,6 +70,57 @@ section[data-testid="stSidebar"] span {
     color: #0f172a !important;
     font-weight: 500;
 }
+section[data-testid="stSidebar"] input {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+}
+
+/* 檔案上傳區塊 */
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+    background-color: #ffffff !important;
+    border-radius: 8px !important;
+    padding: 6px !important;
+    border: 1px dashed #94a3b8 !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
+    background-color: #f8fafc !important;
+}
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] small,
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] span,
+section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+    color: #334155 !important;
+}
+
+/* 頂部橫幅 */
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #ffffff;
+    padding: 12px 20px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    margin-bottom: 1rem;
+}
+.app-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.app-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
 
 /* 卡片容器 */
 .workspace-card {
@@ -75,11 +128,11 @@ section[data-testid="stSidebar"] span {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 16px;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     box-shadow: 0 1px 2px rgba(0,0,0,0.02);
 }
 .card-header {
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 700;
     color: #1e293b;
     border-bottom: 1px solid #f1f5f9;
@@ -90,34 +143,26 @@ section[data-testid="stSidebar"] span {
     align-items: center;
 }
 
-.app-title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #0f172a;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+/* Tab 樣式 */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 6px;
+    background-color: #e2e8f0;
+    padding: 4px;
+    border-radius: 8px;
 }
-.app-badge {
-    font-size: 0.8rem;
-    font-weight: 600;
-    background: #e0f2fe;
-    color: #0369a1;
-    padding: 3px 10px;
-    border-radius: 4px;
-}
-
-.date-divider {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+.stTabs [data-baseweb="tab"] {
+    height: 36px;
     border-radius: 6px;
-    padding: 10px 14px;
-    margin: 14px 0 8px 0;
-    font-weight: 700;
-    color: #0369a1;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #475569;
+    background: transparent;
+    padding: 0 14px;
+}
+.stTabs [aria-selected="true"] {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 </style>
 """
@@ -392,20 +437,26 @@ with header_right:
 # ================= 主工作區 =================
 if not st.session_state.df_meta.empty:
   unit_options = ["μM", "mM", "μg/ml", "mg/ml", "nM", "M", "%", "-"]
+  selected_df = st.session_state.df_meta[st.session_state.df_meta["選取"] == True]
 
-  # 確保日期排序正確
-  temp_dates = pd.to_datetime(
-      st.session_state.df_meta["日期 (Date)"],
-      format="%d-%m-%Y",
-      errors="coerce",
+  compounds_all = sorted(
+      st.session_state.df_meta["化合物 (Compound)"].unique(),
+      key=lambda x: (
+          0
+          if any(
+              k in x.lower()
+              for k in ["basal", "control", "water+water", "water+reagent"]
+          )
+          else 1,
+          x.lower(),
+      ),
   )
-  sorted_date_indices = np.argsort(temp_dates)
-  all_unique_dates = (
-      st.session_state.df_meta["日期 (Date)"]
-      .iloc[sorted_date_indices]
-      .unique()
-      .tolist()
-  )
+
+  if (
+      st.session_state.selected_comp not in compounds_all
+      and len(compounds_all) > 0
+  ):
+    st.session_state.selected_comp = compounds_all[0]
 
   tab_data, tab_excel, tab_plot = st.tabs([
       "  樣品檢視與對照組  ",
@@ -414,31 +465,77 @@ if not st.session_state.df_meta.empty:
   ])
 
   # -------------------------------------------------------------
-  # 分頁 1: 依日期先後順序，整頁向下滾動展開
+  # 分頁 1: 保留左側標籤切換，右側按日期分區滾動呈現
   # -------------------------------------------------------------
   with tab_data:
-    st.markdown(
-        """
-        <div class="workspace-card">
-            <div class="card-header">
-                <span>全域批次操作</span>
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    g_col1, g_col2, g_col3 = st.columns([2, 1.2, 1.2])
-    with g_col1:
+    col_nav, col_detail = st.columns([1.1, 3.1])
+
+    with col_nav:
+      st.markdown(
+          """
+            <div class="workspace-card" style="padding: 12px;">
+                <div class="card-header" style="margin-bottom: 8px;">樣品清單</div>
+            """,
+          unsafe_allow_html=True,
+      )
+
+      for comp in compounds_all:
+        cnt = len(
+            st.session_state.df_meta[
+                st.session_state.df_meta["化合物 (Compound)"] == comp
+            ]
+        )
+        is_active = comp == st.session_state.selected_comp
+
+        r_c1, r_c2 = st.columns([4, 1])
+        with r_c1:
+          btn_type = "primary" if is_active else "secondary"
+          if st.button(
+              f"{comp} ({cnt})",
+              key=f"nav_btn_{comp}",
+              use_container_width=True,
+              type=btn_type,
+          ):
+            st.session_state.selected_comp = comp
+            st.rerun()
+
+        with r_c2:
+          if st.button("✕", key=f"del_x_{comp}", help=f"刪除 {comp}"):
+            st.session_state.history_stack.append((
+                st.session_state.df_meta.copy(),
+                st.session_state.parsed_data.copy(),
+            ))
+
+            uids_to_remove = st.session_state.df_meta[
+                st.session_state.df_meta["化合物 (Compound)"] == comp
+            ]["UID"].tolist()
+            for uid in uids_to_remove:
+              st.session_state.parsed_data.pop(uid, None)
+
+            st.session_state.df_meta = st.session_state.df_meta[
+                st.session_state.df_meta["化合物 (Compound)"] != comp
+            ].reset_index(drop=True)
+
+            rem_comps = sorted(
+                st.session_state.df_meta["化合物 (Compound)"].unique()
+            )
+            st.session_state.selected_comp = (
+                rem_comps[0] if rem_comps else None
+            )
+            st.session_state.editor_version += 1
+            st.rerun()
+
+      st.markdown("---")
+      st.caption("全域單位快速套用")
       sel_g_unit = st.selectbox(
-          "全域單位快速套用",
+          "套用單位",
           unit_options,
           index=unit_options.index(st.session_state.global_unit)
           if st.session_state.global_unit in unit_options
           else 3,
+          label_visibility="collapsed",
       )
-    with g_col2:
-      st.write("")
-      st.write("")
-      if st.button("一鍵套用至所有化合物", use_container_width=True):
+      if st.button("一鍵套用全部", use_container_width=True):
         st.session_state.global_unit = sel_g_unit
         mask = ~st.session_state.df_meta["化合物 (Compound)"].str.lower().isin(
             ["control", "basal", "blank (water+water)", "blank (water+reagent)"]
@@ -446,110 +543,168 @@ if not st.session_state.df_meta.empty:
         st.session_state.df_meta.loc[mask, "單位 (Unit)"] = sel_g_unit
         st.session_state.editor_version += 1
         st.rerun()
-    with g_col3:
-      st.write("")
-      st.write("")
-      r_a, r_b = st.columns(2)
-      with r_a:
-        if st.button("全部勾選", use_container_width=True):
-          st.session_state.df_meta["選取"] = True
-          st.session_state.editor_version += 1
-          st.rerun()
-      with r_b:
-        if st.button("全部取消", use_container_width=True):
-          st.session_state.df_meta["選取"] = False
-          st.session_state.editor_version += 1
-          st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+      st.markdown("</div>", unsafe_allow_html=True)
 
-    # 依日期先後順序直向排列
-    for d in all_unique_dates:
-      date_mask = st.session_state.df_meta["日期 (Date)"] == d
-      date_df = st.session_state.df_meta[date_mask]
-
-      st.markdown(
-          f"""
-            <div class="date-divider">
-                <span>🗓️ 實驗日期：{d} ({len(date_df)} 筆數據)</span>
-            </div>
-            """,
-          unsafe_allow_html=True,
-      )
-
-      d_btn1, d_btn2, _ = st.columns([1.2, 1.2, 6])
-      with d_btn1:
-        if st.button(
-            f"全選此日 ({d})", key=f"sel_date_{d}", use_container_width=True
-        ):
-          st.session_state.df_meta.loc[date_mask, "選取"] = True
-          st.session_state.editor_version += 1
-          st.rerun()
-      with d_btn2:
-        if st.button(
-            f"清除此日 ({d})", key=f"clr_date_{d}", use_container_width=True
-        ):
-          st.session_state.df_meta.loc[date_mask, "選取"] = False
-          st.session_state.editor_version += 1
-          st.rerun()
-
-      compounds_in_date = sorted(
-          date_df["化合物 (Compound)"].unique(),
-          key=lambda x: (
-              0
-              if any(
-                  k in x.lower()
-                  for k in ["basal", "control", "water+water", "water+reagent"]
-              )
-              else 1,
-              x.lower(),
-          ),
-      )
-
-      for comp in compounds_in_date:
-        comp_date_mask = date_mask & (
-            st.session_state.df_meta["化合物 (Compound)"] == comp
+    with col_detail:
+      current_comp = st.session_state.selected_comp
+      if current_comp:
+        is_ctrl_comp = any(
+            k in current_comp.lower()
+            for k in ["basal", "control", "water+water", "water+reagent"]
         )
-        comp_df = st.session_state.df_meta[comp_date_mask]
 
         st.markdown(
             f"""
-                <div class="workspace-card" style="margin-top: 8px;">
+                <div class="workspace-card">
                     <div class="card-header">
-                        <span>🧪 <b>{comp}</b> <small style='color:#64748b;'>({d})</small></span>
+                        <span>當前檢視化合物：<b>{current_comp}</b></span>
                     </div>
                 """,
             unsafe_allow_html=True,
         )
 
-        edited_comp = st.data_editor(
-            comp_df,
-            column_config={
-                "選取": st.column_config.CheckboxColumn(required=True),
-                "UID": None,
-                "日期 (Date)": st.column_config.TextColumn("日期 (Date)"),
-                "測量時間": st.column_config.TextColumn("測量時間"),
-                "化合物 (Compound)": st.column_config.TextColumn(
-                    "化合物名稱", required=True
-                ),
-                "樣品名稱 (Sample)": st.column_config.TextColumn(
-                    "原始樣品名稱"
-                ),
-                "劑量 (Dose)": st.column_config.TextColumn("劑量"),
-                "單位 (Unit)": st.column_config.SelectboxColumn(
-                    "單位", options=unit_options, required=True
-                ),
-                "後綴 (Suffix)": st.column_config.TextColumn("標籤備註 (後綴)"),
-                "來源檔名": st.column_config.TextColumn("來源檔名"),
-            },
-            disabled=["日期 (Date)", "測量時間", "來源檔名"],
-            use_container_width=True,
-            hide_index=True,
-            key=f"editor_{d}_{comp}_v{st.session_state.editor_version}",
-        )
-        st.session_state.df_meta.update(edited_comp)
+        h_col1, h_col2 = st.columns([2.2, 2.0])
+        with h_col1:
+          if not is_ctrl_comp:
+            cur_comp_unit = st.session_state.df_meta[
+                st.session_state.df_meta["化合物 (Compound)"] == current_comp
+            ]["單位 (Unit)"].values[0]
+            def_idx = (
+                unit_options.index(cur_comp_unit)
+                if cur_comp_unit in unit_options
+                else 3
+            )
+
+            def make_change_handler(target_comp):
+              def handler():
+                new_u = st.session_state[f"u_sel_{target_comp}"]
+                mask = (
+                    st.session_state.df_meta["化合物 (Compound)"]
+                    == target_comp
+                )
+                st.session_state.df_meta.loc[mask, "單位 (Unit)"] = new_u
+                st.session_state.editor_version += 1
+
+              return handler
+
+            st.selectbox(
+                f"變更 {current_comp} 單位:",
+                unit_options,
+                index=def_idx,
+                key=f"u_sel_{current_comp}",
+                on_change=make_change_handler(current_comp),
+            )
+
+        with h_col2:
+          st.write("")
+          st.write("")
+          c_sub1, c_sub2 = st.columns(2)
+          with c_sub1:
+            if st.button(
+                "全選此藥物",
+                key=f"sel_all_{current_comp}",
+                use_container_width=True,
+            ):
+              mask = (
+                  st.session_state.df_meta["化合物 (Compound)"]
+                  == current_comp
+              )
+              st.session_state.df_meta.loc[mask, "選取"] = True
+              st.session_state.editor_version += 1
+              st.rerun()
+          with c_sub2:
+            if st.button(
+                "清除此藥物",
+                key=f"clr_all_{current_comp}",
+                use_container_width=True,
+            ):
+              mask = (
+                  st.session_state.df_meta["化合物 (Compound)"]
+                  == current_comp
+              )
+              st.session_state.df_meta.loc[mask, "選取"] = False
+              st.session_state.editor_version += 1
+              st.rerun()
+
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # 每日對照組基準綁定
+        # 抓取該藥物所有的日期並排序
+        comp_df_all = st.session_state.df_meta[
+            st.session_state.df_meta["化合物 (Compound)"] == current_comp
+        ]
+        comp_unique_dates = sorted(
+            comp_df_all["日期 (Date)"].unique(),
+            key=lambda x: pd.to_datetime(x, format="%d-%m-%Y", errors="coerce"),
+        )
+
+        # 依日期分別生成獨立區塊
+        for d in comp_unique_dates:
+          date_mask = (
+              st.session_state.df_meta["化合物 (Compound)"] == current_comp
+          ) & (st.session_state.df_meta["日期 (Date)"] == d)
+          date_comp_df = st.session_state.df_meta[date_mask]
+
+          st.markdown(
+              f"""
+                    <div class="workspace-card">
+                        <div class="card-header" style="color: #0369a1;">
+                            <span>🗓️ 實驗日期：<b>{d}</b> ({len(date_comp_df)} 筆樣品)</span>
+                        </div>
+                    """,
+              unsafe_allow_html=True,
+          )
+
+          d_c1, d_c2, _ = st.columns([1.2, 1.2, 5])
+          with d_c1:
+            if st.button(
+                f"全選此日",
+                key=f"sel_{current_comp}_{d}",
+                use_container_width=True,
+            ):
+              st.session_state.df_meta.loc[date_mask, "選取"] = True
+              st.session_state.editor_version += 1
+              st.rerun()
+          with d_c2:
+            if st.button(
+                f"清除此日",
+                key=f"clr_{current_comp}_{d}",
+                use_container_width=True,
+            ):
+              st.session_state.df_meta.loc[date_mask, "選取"] = False
+              st.session_state.editor_version += 1
+              st.rerun()
+
+          edited_comp_date = st.data_editor(
+              date_comp_df,
+              column_config={
+                  "選取": st.column_config.CheckboxColumn(required=True),
+                  "UID": None,
+                  "日期 (Date)": st.column_config.TextColumn("日期 (Date)"),
+                  "測量時間": st.column_config.TextColumn("測量時間"),
+                  "化合物 (Compound)": st.column_config.TextColumn(
+                      "化合物名稱", required=True
+                  ),
+                  "樣品名稱 (Sample)": st.column_config.TextColumn(
+                      "樣品名稱"
+                  ),
+                  "劑量 (Dose)": st.column_config.TextColumn("劑量"),
+                  "單位 (Unit)": st.column_config.SelectboxColumn(
+                      "單位", options=unit_options, required=True
+                  ),
+                  "後綴 (Suffix)": st.column_config.TextColumn(
+                      "標籤備註 (後綴)"
+                  ),
+                  "來源檔名": st.column_config.TextColumn("來源檔名"),
+              },
+              disabled=["日期 (Date)", "測量時間", "來源檔名"],
+              use_container_width=True,
+              hide_index=True,
+              key=f"editor_{current_comp}_{d}_v{st.session_state.editor_version}",
+          )
+          st.session_state.df_meta.update(edited_comp_date)
+          st.markdown("</div>", unsafe_allow_html=True)
+
+    # 每日對照組基準綁定 (Anchoring)
     st.markdown(
         """
         <div class="workspace-card">
@@ -561,11 +716,10 @@ if not st.session_state.df_meta.empty:
     selected_df_curr = st.session_state.df_meta[
         st.session_state.df_meta["選取"] == True
     ]
-    unique_active_dates = [
-        d
-        for d in all_unique_dates
-        if d in selected_df_curr["日期 (Date)"].values
-    ]
+    unique_active_dates = sorted(
+        selected_df_curr["日期 (Date)"].unique(),
+        key=lambda x: pd.to_datetime(x, format="%d-%m-%Y", errors="coerce"),
+    )
     cols = st.columns(
         len(unique_active_dates) if len(unique_active_dates) > 0 else 1
     )
@@ -698,7 +852,12 @@ if not st.session_state.df_meta.empty:
             clean_sheet_title = "Sheet"
 
           comp_df = selected_df[selected_df["化合物 (Compound)"] == comp]
-          comp_dates = sorted(comp_df["日期 (Date)"].unique())
+          comp_dates = sorted(
+              comp_df["日期 (Date)"].unique(),
+              key=lambda x: pd.to_datetime(
+                  x, format="%d-%m-%Y", errors="coerce"
+              ),
+          )
           processed_rows = []
 
           for d in comp_dates:
@@ -726,15 +885,15 @@ if not st.session_state.df_meta.empty:
 
             if is_superoxide:
               processed_rows.append([
-                  d,
-                  c_info["來源檔名"],
-                  "control",
-                  round(calc_dict[c_uid]["min"], 4),
-                  round(calc_dict[c_uid]["max"], 4),
-                  round(c_diff, 4),
-                  round(c_diff * 47.4, 4),
-                  "100.00%",
-                  "0.00%",
+                d,
+                c_info["來源檔名"],
+                "control",
+                round(calc_dict[c_uid]["min"], 4),
+                round(calc_dict[c_uid]["max"], 4),
+                round(c_diff, 4),
+                round(c_diff * 47.4, 4),
+                "100.00%",
+                "0.00%",
               ])
             else:
               c_net = c_diff - b_diff
@@ -1084,7 +1243,6 @@ if not st.session_state.df_meta.empty:
             )
             ax.grid(True, linestyle="--", alpha=0.3)
 
-            # 動態調整底邊距，避免遮蔽 X 軸
             source_box_str = "Source Files:\n" + "\n".join(sources)
             line_cnt = len(sources) + 1
             bottom_margin = max(0.22, 0.10 + 0.035 * line_cnt)
@@ -1341,7 +1499,6 @@ if not st.session_state.df_meta.empty:
                   unsafe_allow_html=True,
               )
 
-              # 提供該日期專屬的批量操作
               q_c1, q_c2 = st.columns(2)
               with q_c1:
                 if st.button(
@@ -1559,7 +1716,6 @@ if not st.session_state.df_meta.empty:
           ax.spines["right"].set_visible(False)
           ax.grid(True, linestyle="--", alpha=0.4)
 
-          # 動態調整底部邊界以容納多行來源，徹底避開 X 軸
           source_cnt = len(source_texts) + 1
           bot_padding = max(0.20, min(0.48, 0.08 + 0.025 * source_cnt))
           plt.subplots_adjust(bottom=bot_padding)
