@@ -12,7 +12,7 @@ import streamlit as st
 
 # ================= 頁面全域設定 =================
 st.set_page_config(
-    page_title="SpectroKinetics Pro | 動力學光譜數據工作站",
+    page_title="SpectroKinetics Pro",
     layout="wide",
     page_icon="[DATA]",
     initial_sidebar_state="expanded",
@@ -50,16 +50,16 @@ header {
 }
 
 .block-container {
-    padding-top: 2.5rem !important;
+    padding-top: 2.2rem !important;
     padding-bottom: 1.5rem !important;
     max-width: 98% !important;
 }
 
 /* 側邊控制台 */
 section[data-testid="stSidebar"] {
-    background-color: #f1f5f9 !important;
+    background-color: #f8fafc !important;
     color: #1e293b !important;
-    border-right: 1px solid #cbd5e1;
+    border-right: 1px solid #e2e8f0;
 }
 section[data-testid="stSidebar"] h1, 
 section[data-testid="stSidebar"] h2, 
@@ -106,7 +106,7 @@ section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
     margin-bottom: 1rem;
 }
 .app-title {
-    font-size: 1.2rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: #0f172a;
     display: flex;
@@ -115,11 +115,14 @@ section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
 }
 .app-badge {
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 700;
     background: #e0f2fe;
-    color: #0369a1;
-    padding: 2px 8px;
+    color: #0284c7;
+    padding: 3px 10px;
     border-radius: 4px;
+    border: 1px solid #bae6fd;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 /* 卡片容器 */
@@ -138,6 +141,48 @@ section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
     border-bottom: 1px solid #f1f5f9;
     padding-bottom: 8px;
     margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* 色彩標籤與區塊 */
+.tag-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+.tag-date {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+}
+.tag-comp {
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+.tag-mode {
+    background: #faf5ff;
+    color: #6b21a8;
+    border: 1px solid #e9d5ff;
+}
+
+.date-divider {
+    background: #f8fafc;
+    border-left: 4px solid #0284c7;
+    border-top: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
+    border-bottom: 1px solid #e2e8f0;
+    border-radius: 0 6px 6px 0;
+    padding: 8px 14px;
+    margin: 12px 0 8px 0;
+    font-weight: 700;
+    color: #0f172a;
+    font-size: 13px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -350,7 +395,7 @@ def parse_txt_files(uploaded_files, def_unit):
 st.sidebar.markdown(
     """
     <div style='padding: 6px 0 12px 0;'>
-        <div style='font-size: 1.15rem; font-weight: 700; color: #0284c7;'>[ 實驗參數配置 ]</div>
+        <div style='font-size: 1.05rem; font-weight: 700; color: #0284c7; letter-spacing: 0.5px;'>[ EXPERIMENT CONFIG ]</div>
         <div style='font-size: 0.8rem; color: #64748b;'>實驗條件與反應時序設定</div>
     </div>
     """,
@@ -364,8 +409,8 @@ is_superoxide = "Superoxide" in assay_type
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
-    "<div style='font-size: 12px; font-weight: 700; color:"
-    " #475569;'>METADATA</div>",
+    "<div style='font-size: 11px; font-weight: 700; color: #475569;"
+    " letter-spacing: 0.5px;'>METADATA CONFIGURATION</div>",
     unsafe_allow_html=True,
 )
 meta_cell = st.sidebar.text_input("Cell", value="6 × 10⁵ cells/ml")
@@ -382,8 +427,8 @@ meta_sub = st.sidebar.text_input(
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
-    "<div style='font-size: 12px; font-weight: 700; color: #475569;'>反應吸光時序"
-    " (秒)</div>",
+    "<div style='font-size: 11px; font-weight: 700; color: #475569;"
+    " letter-spacing: 0.5px;'>TIMING PARAMETERS (SEC)</div>",
     unsafe_allow_html=True,
 )
 t_start = st.sidebar.number_input("Start", value=420)
@@ -392,8 +437,8 @@ t_react = st.sidebar.number_input("Reaction", value=600)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
-    "<div style='font-size: 12px; font-weight: 700; color: #475569;'>匯入原始 TXT"
-    " 檔</div>",
+    "<div style='font-size: 11px; font-weight: 700; color: #475569;"
+    " letter-spacing: 0.5px;'>RAW DATA IMPORT</div>",
     unsafe_allow_html=True,
 )
 uploaded_files = st.sidebar.file_uploader(
@@ -465,7 +510,7 @@ if not st.session_state.df_meta.empty:
   ])
 
   # -------------------------------------------------------------
-  # 分頁 1: 保留左側標籤切換，右側按日期分區滾動呈現
+  # 分頁 1: 左側選單 + 右側依日期分區滾動
   # -------------------------------------------------------------
   with tab_data:
     col_nav, col_detail = st.columns([1.1, 3.1])
@@ -557,7 +602,7 @@ if not st.session_state.df_meta.empty:
             f"""
                 <div class="workspace-card">
                     <div class="card-header">
-                        <span>當前檢視化合物：<b>{current_comp}</b></span>
+                        <span>當前檢視化合物：<span class="tag-badge tag-comp">{current_comp}</span></span>
                     </div>
                 """,
             unsafe_allow_html=True,
@@ -628,7 +673,6 @@ if not st.session_state.df_meta.empty:
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # 抓取該藥物所有的日期並排序
         comp_df_all = st.session_state.df_meta[
             st.session_state.df_meta["化合物 (Compound)"] == current_comp
         ]
@@ -637,7 +681,6 @@ if not st.session_state.df_meta.empty:
             key=lambda x: pd.to_datetime(x, format="%d-%m-%Y", errors="coerce"),
         )
 
-        # 依日期分別生成獨立區塊
         for d in comp_unique_dates:
           date_mask = (
               st.session_state.df_meta["化合物 (Compound)"] == current_comp
@@ -648,7 +691,7 @@ if not st.session_state.df_meta.empty:
               f"""
                     <div class="workspace-card">
                         <div class="card-header" style="color: #0369a1;">
-                            <span>🗓️ 實驗日期：<b>{d}</b> ({len(date_comp_df)} 筆樣品)</span>
+                            <span>實驗日期：<span class="tag-badge tag-date">{d}</span> ({len(date_comp_df)} 筆樣品)</span>
                         </div>
                     """,
               unsafe_allow_html=True,
@@ -704,7 +747,7 @@ if not st.session_state.df_meta.empty:
           st.session_state.df_meta.update(edited_comp_date)
           st.markdown("</div>", unsafe_allow_html=True)
 
-    # 每日對照組基準綁定 (Anchoring)
+    # 每日對照組基準綁定
     st.markdown(
         """
         <div class="workspace-card">
@@ -885,15 +928,15 @@ if not st.session_state.df_meta.empty:
 
             if is_superoxide:
               processed_rows.append([
-                d,
-                c_info["來源檔名"],
-                "control",
-                round(calc_dict[c_uid]["min"], 4),
-                round(calc_dict[c_uid]["max"], 4),
-                round(c_diff, 4),
-                round(c_diff * 47.4, 4),
-                "100.00%",
-                "0.00%",
+                  d,
+                  c_info["來源檔名"],
+                  "control",
+                  round(calc_dict[c_uid]["min"], 4),
+                  round(calc_dict[c_uid]["max"], 4),
+                  round(c_diff, 4),
+                  round(c_diff * 47.4, 4),
+                  "100.00%",
+                  "0.00%",
               ])
             else:
               c_net = c_diff - b_diff
@@ -1102,7 +1145,7 @@ if not st.session_state.df_meta.empty:
             non_ctrl_samples["日期 (Date)"].unique(),
             key=lambda x: pd.to_datetime(x, format="%d-%m-%Y", errors="coerce"),
         ):
-          with st.expander(f"🗓️ 日期：{d}", expanded=True):
+          with st.expander(f"日期：{d}", expanded=True):
             date_sub = non_ctrl_samples[non_ctrl_samples["日期 (Date)"] == d]
             for _, row in date_sub.iterrows():
               uid = row["UID"]
@@ -1161,6 +1204,7 @@ if not st.session_state.df_meta.empty:
               )
 
             if p_d in anchor_settings:
+              c_uid = anchor_settings[d]["Control"] if d in anchor_settings else None
               c_uid = anchor_settings[p_d]["Control"]
               c_row = selected_df[selected_df["UID"] == c_uid].iloc[0]
               c_df = st.session_state.parsed_data[c_uid]["df"]
@@ -1267,7 +1311,7 @@ if not st.session_state.df_meta.empty:
             plt.close(fig)
 
           if st.button(
-              f"📦 批量生成並打包全部 ({len(checked_a)} 張高解析圖表)",
+              f"批量生成並打包全部 ({len(checked_a)} 張高解析圖表)",
               use_container_width=True,
           ):
             zip_buffer = io.BytesIO()
@@ -1484,7 +1528,7 @@ if not st.session_state.df_meta.empty:
           comp_sub = selected_df[selected_df["化合物 (Compound)"] == comp]
           comp_uids = comp_sub["UID"].tolist()
 
-          with st.expander(f"🧪 {comp} ({len(comp_uids)})", expanded=False):
+          with st.expander(f"樣品：{comp} ({len(comp_uids)})", expanded=False):
             comp_dates = sorted(
                 comp_sub["日期 (Date)"].unique(),
                 key=lambda x: pd.to_datetime(
@@ -1495,7 +1539,7 @@ if not st.session_state.df_meta.empty:
               date_comp_sub = comp_sub[comp_sub["日期 (Date)"] == d_b]
               st.markdown(
                   f"<div style='font-size:12px; font-weight:700;"
-                  f" color:#0369a1; margin-top:4px;'>🗓️ {d_b}</div>",
+                  f" color:#0284c7; margin-top:4px;'>[ 日期：{d_b} ]</div>",
                   unsafe_allow_html=True,
               )
 
@@ -1691,7 +1735,7 @@ if not st.session_state.df_meta.empty:
               ha="center",
               va="bottom",
               fontweight="bold",
-          )
+            )
           ax.text(
               420,
               1.01,
