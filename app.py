@@ -1733,7 +1733,7 @@ if not st.session_state.df_meta.empty:
                 st.markdown(
                     """
                     <div class="workspace-card" style="padding: 12px;">
-                        <div class="card-header" style="margin-bottom: 8px;">自由疊圖清單 (依藥物與日期)</div>
+                        <div class="card-header" style="margin-bottom: 8px;">自由疊圖清單 (依藥物/日期/濃度)</div>
                     """,
                     unsafe_allow_html=True,
                 )
@@ -1765,72 +1765,165 @@ if not st.session_state.df_meta.empty:
                     with st.expander(
                         f"樣品：{comp} ({len(comp_uids)})", expanded=False
                     ):
-                        comp_dates = sorted(
-                            comp_sub["日期 (Date)"].unique(),
-                            key=lambda x: pd.to_datetime(
-                                x, format="%d-%m-%Y", errors="coerce"
-                            ),
+                        b_group_mode = st.radio(
+                            f"分組與快速全選方式 ({comp})",
+                            ["依日期分組", "依濃度分組"],
+                            horizontal=True,
+                            key=f"b_grp_mode_{comp}",
+                            label_visibility="collapsed",
                         )
-                        for d_b in comp_dates:
-                            date_comp_sub = comp_sub[
-                                comp_sub["日期 (Date)"] == d_b
-                            ]
-                            st.markdown(
-                                f"<div style='font-size:12px; font-weight:700;"
-                                f" color:#0284c7; margin-top:4px;'>[ 日期：{d_b} ]</div>",
-                                unsafe_allow_html=True,
+
+                        if b_group_mode == "依日期分組":
+                            comp_dates = sorted(
+                                comp_sub["日期 (Date)"].unique(),
+                                key=lambda x: pd.to_datetime(
+                                    x, format="%d-%m-%Y", errors="coerce"
+                                ),
                             )
+                            for d_b in comp_dates:
+                                date_comp_sub = comp_sub[
+                                    comp_sub["日期 (Date)"] == d_b
+                                ]
 
-                            q_c1, q_c2 = st.columns(2)
-                            with q_c1:
-                                if st.button(
-                                    "全選此日",
-                                    key=f"b_all_{comp}_{d_b}",
-                                    use_container_width=True,
-                                ):
-                                    for u in date_comp_sub["UID"].tolist():
-                                        st.session_state[
-                                            f"chk_b_comp_{u}"
-                                        ] = True
-                                    st.rerun()
-                            with q_c2:
-                                if st.button(
-                                    "清除此日",
-                                    key=f"b_clr_{comp}_{d_b}",
-                                    use_container_width=True,
-                                ):
-                                    for u in date_comp_sub["UID"].tolist():
-                                        st.session_state[
-                                            f"chk_b_comp_{u}"
-                                        ] = False
-                                    st.rerun()
+                                t_col, btn_c1, btn_c2 = st.columns(
+                                    [2.2, 1.0, 1.0]
+                                )
+                                with t_col:
+                                    st.markdown(
+                                        f"<div style='font-size:12px; font-weight:700; color:#0284c7; padding-top:4px;'>📅 {d_b}</div>",
+                                        unsafe_allow_html=True,
+                                    )
+                                with btn_c1:
+                                    if st.button(
+                                        "全選",
+                                        key=f"b_all_d_{comp}_{d_b}",
+                                        use_container_width=True,
+                                    ):
+                                        for u in date_comp_sub["UID"].tolist():
+                                            st.session_state[
+                                                f"chk_b_comp_{u}"
+                                            ] = True
+                                        st.rerun()
+                                with btn_c2:
+                                    if st.button(
+                                        "清除",
+                                        key=f"b_clr_d_{comp}_{d_b}",
+                                        use_container_width=True,
+                                    ):
+                                        for u in date_comp_sub["UID"].tolist():
+                                            st.session_state[
+                                                f"chk_b_comp_{u}"
+                                            ] = False
+                                        st.rerun()
 
-                            for _, r in date_comp_sub.iterrows():
-                                u = r["UID"]
-                                chk_k = f"chk_b_comp_{u}"
-                                r_c1, r_c2 = st.columns([2.5, 1.8])
-                                with r_c1:
-                                    lbl = f"{r['樣品名稱 (Sample)']} ({r['測量時間']})"
-                                    is_checked = st.checkbox(
-                                        lbl,
-                                        value=st.session_state.get(
-                                            chk_k, False
-                                        ),
-                                        key=chk_k,
+                                for _, r in date_comp_sub.iterrows():
+                                    u = r["UID"]
+                                    chk_k = f"chk_b_comp_{u}"
+                                    r_c1, r_c2 = st.columns([2.5, 1.8])
+                                    with r_c1:
+                                        lbl = f"{r['樣品名稱 (Sample)']} ({r['測量時間']})"
+                                        is_checked = st.checkbox(
+                                            lbl,
+                                            value=st.session_state.get(
+                                                chk_k, False
+                                            ),
+                                            key=chk_k,
+                                        )
+                                    with r_c2:
+                                        sub_target = st.selectbox(
+                                            "扣除",
+                                            sub_opts,
+                                            index=0,
+                                            format_func=lambda x: names_map.get(
+                                                x, x
+                                            ),
+                                            key=f"sub_sel_{u}",
+                                            label_visibility="collapsed",
+                                        )
+                                    if is_checked:
+                                        selected_plot_pairs.append(
+                                            (u, sub_target)
+                                        )
+
+                        else:
+                            comp_doses = sorted(
+                                comp_sub["劑量 (Dose)"].unique(),
+                                key=lambda x: float(x)
+                                if str(x).replace(".", "", 1).isdigit()
+                                else 9999,
+                            )
+                            for dose_val in comp_doses:
+                                dose_unit = comp_sub[
+                                    comp_sub["劑量 (Dose)"] == dose_val
+                                ]["單位 (Unit)"].iloc[0]
+                                dose_display = (
+                                    f"{dose_val} {dose_unit}"
+                                    if str(dose_val) != "0"
+                                    else "0"
+                                )
+                                dose_comp_sub = comp_sub[
+                                    comp_sub["劑量 (Dose)"] == dose_val
+                                ]
+
+                                t_col, btn_c1, btn_c2 = st.columns(
+                                    [2.2, 1.0, 1.0]
+                                )
+                                with t_col:
+                                    st.markdown(
+                                        f"<div style='font-size:12px; font-weight:700; color:#059669; padding-top:4px;'>🧪 濃度: {dose_display}</div>",
+                                        unsafe_allow_html=True,
                                     )
-                                with r_c2:
-                                    sub_target = st.selectbox(
-                                        "扣除",
-                                        sub_opts,
-                                        index=0,
-                                        format_func=lambda x: names_map.get(
-                                            x, x
-                                        ),
-                                        key=f"sub_sel_{u}",
-                                        label_visibility="collapsed",
-                                    )
-                                if is_checked:
-                                    selected_plot_pairs.append((u, sub_target))
+                                with btn_c1:
+                                    if st.button(
+                                        "全選",
+                                        key=f"b_all_dose_{comp}_{dose_val}",
+                                        use_container_width=True,
+                                    ):
+                                        for u in dose_comp_sub["UID"].tolist():
+                                            st.session_state[
+                                                f"chk_b_comp_{u}"
+                                            ] = True
+                                        st.rerun()
+                                with btn_c2:
+                                    if st.button(
+                                        "清除",
+                                        key=f"b_clr_dose_{comp}_{dose_val}",
+                                        use_container_width=True,
+                                    ):
+                                        for u in dose_comp_sub["UID"].tolist():
+                                            st.session_state[
+                                                f"chk_b_comp_{u}"
+                                            ] = False
+                                        st.rerun()
+
+                                for _, r in dose_comp_sub.iterrows():
+                                    u = r["UID"]
+                                    chk_k = f"chk_b_comp_{u}"
+                                    r_c1, r_c2 = st.columns([2.5, 1.8])
+                                    with r_c1:
+                                        lbl = f"{r['日期 (Date)']} ({r['測量時間']})"
+                                        is_checked = st.checkbox(
+                                            lbl,
+                                            value=st.session_state.get(
+                                                chk_k, False
+                                            ),
+                                            key=chk_k,
+                                        )
+                                    with r_c2:
+                                        sub_target = st.selectbox(
+                                            "扣除",
+                                            sub_opts,
+                                            index=0,
+                                            format_func=lambda x: names_map.get(
+                                                x, x
+                                            ),
+                                            key=f"sub_sel_{u}",
+                                            label_visibility="collapsed",
+                                        )
+                                    if is_checked:
+                                        selected_plot_pairs.append(
+                                            (u, sub_target)
+                                        )
 
                 st.caption(f"已選取 {len(selected_plot_pairs)} 條曲線")
                 st.markdown("</div>", unsafe_allow_html=True)
