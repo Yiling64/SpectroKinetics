@@ -172,23 +172,6 @@ section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
     border: 1px solid #e9d5ff;
 }
 
-.date-divider {
-    background: #f8fafc;
-    border-left: 4px solid #0284c7;
-    border-top: 1px solid #e2e8f0;
-    border-right: 1px solid #e2e8f0;
-    border-bottom: 1px solid #e2e8f0;
-    border-radius: 0 6px 6px 0;
-    padding: 8px 14px;
-    margin: 12px 0 8px 0;
-    font-weight: 700;
-    color: #0f172a;
-    font-size: 13px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
 /* Tab 樣式 */
 .stTabs [data-baseweb="tab-list"] {
     gap: 6px;
@@ -1252,9 +1235,7 @@ if not st.session_state.df_meta.empty:
             ]
             all_uids_a = non_ctrl_samples["UID"].tolist()
 
-            if "selected_uids_a" not in st.session_state:
-                st.session_state.selected_uids_a = all_uids_a.copy()
-
+            # 左側選單控制
             with col_pick_a:
                 st.markdown(
                     """
@@ -1264,230 +1245,172 @@ if not st.session_state.df_meta.empty:
                     unsafe_allow_html=True,
                 )
 
-                b_c1, b_c2 = st.columns(2)
-                with b_c1:
-                    if st.button(
-                        "全部選取", use_container_width=True, key="btn_all_a"
-                    ):
-                        st.session_state.selected_uids_a = all_uids_a.copy()
+                g_b1, g_b2 = st.columns(2)
+                with g_b1:
+                    if st.button("全選所有樣品", use_container_width=True, key="btn_all_a"):
+                        for u in all_uids_a:
+                            st.session_state[f"chk_a_{u}"] = True
                         st.rerun()
-                with b_c2:
-                    if st.button(
-                        "全部取消 (清除)",
-                        use_container_width=True,
-                        key="btn_clr_a",
-                    ):
-                        st.session_state.selected_uids_a = []
+                with g_b2:
+                    if st.button("全部取消勾選", use_container_width=True, key="btn_clr_a"):
+                        for u in all_uids_a:
+                            st.session_state[f"chk_a_{u}"] = False
                         st.rerun()
 
-                checked_a = []
-                for d in sorted(
-                    non_ctrl_samples["日期 (Date)"].unique(),
-                    key=lambda x: pd.to_datetime(
-                        x, format="%d-%m-%Y", errors="coerce"
-                    ),
-                ):
-                    with st.expander(f"日期：{d}", expanded=True):
-                        date_sub = non_ctrl_samples[
-                            non_ctrl_samples["日期 (Date)"] == d
+                st.markdown("---")
+
+                group_view = st.radio(
+                    "群組分類視角",
+                    ["依日期分組", "依化合物分組"],
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    key="mode_a_group_view",
+                )
+
+                if group_view == "依日期分組":
+                    sorted_dates = sorted(
+                        non_ctrl_samples["日期 (Date)"].unique(),
+                        key=lambda x: pd.to_datetime(
+                            x, format="%d-%m-%Y", errors="coerce"
+                        ),
+                    )
+
+                    for d in sorted_dates:
+                        date_sub = non_ctrl_samples[non_ctrl_samples["日期 (Date)"] == d]
+                        d_uids = date_sub["UID"].tolist()
+
+                        with st.expander(f"📅 日期：{d} ({len(d_uids)})", expanded=False):
+                            c_btn1, c_btn2 = st.columns(2)
+                            with c_btn1:
+                                if st.button(f"全選此日", key=f"sel_d_{d}", use_container_width=True):
+                                    for u in d_uids:
+                                        st.session_state[f"chk_a_{u}"] = True
+                                    st.rerun()
+                            with c_btn2:
+                                if st.button(f"清除此日", key=f"clr_d_{d}", use_container_width=True):
+                                    for u in d_uids:
+                                        st.session_state[f"chk_a_{u}"] = False
+                                    st.rerun()
+
+                            for _, row in date_sub.iterrows():
+                                uid = row["UID"]
+                                label_fmt = build_sample_label(
+                                    row["化合物 (Compound)"],
+                                    row["劑量 (Dose)"],
+                                    row["單位 (Unit)"],
+                                    row["後綴 (Suffix)"],
+                                )
+                                label = f"{label_fmt} ({row['測量時間']})"
+                                st.checkbox(
+                                    label,
+                                    value=st.session_state.get(f"chk_a_{uid}", True),
+                                    key=f"chk_a_{uid}",
+                                )
+
+                else:
+                    sorted_comps = sorted(
+                        non_ctrl_samples["化合物 (Compound)"].unique(),
+                        key=lambda x: str(x).lower(),
+                    )
+
+                    for c_name in sorted_comps:
+                        comp_sub = non_ctrl_samples[
+                            non_ctrl_samples["化合物 (Compound)"] == c_name
                         ]
-                        for _, row in date_sub.iterrows():
-                            uid = row["UID"]
-                            label_fmt = build_sample_label(
-                                row["化合物 (Compound)"],
-                                row["劑量 (Dose)"],
-                                row["單位 (Unit)"],
-                                row["後綴 (Suffix)"],
-                            )
-                            label = f"{label_fmt} ({row['測量時間']})"
-                            is_chk = uid in st.session_state.selected_uids_a
-                            if st.checkbox(
-                                label, value=is_chk, key=f"chk_a_{uid}"
-                            ):
-                                checked_a.append(uid)
+                        c_uids = comp_sub["UID"].tolist()
 
-                st.session_state.selected_uids_a = checked_a
+                        with st.expander(f"💊 藥物：{c_name} ({len(c_uids)})", expanded=False):
+                            c_btn1, c_btn2 = st.columns(2)
+                            with c_btn1:
+                                if st.button(f"全選此藥物", key=f"sel_c_{c_name}", use_container_width=True):
+                                    for u in c_uids:
+                                        st.session_state[f"chk_a_{u}"] = True
+                                    st.rerun()
+                            with c_btn2:
+                                if st.button(f"清除此藥物", key=f"clr_c_{c_name}", use_container_width=True):
+                                    for u in c_uids:
+                                        st.session_state[f"chk_a_{u}"] = False
+                                    st.rerun()
+
+                            for _, row in comp_sub.iterrows():
+                                uid = row["UID"]
+                                label_fmt = build_sample_label(
+                                    row["化合物 (Compound)"],
+                                    row["劑量 (Dose)"],
+                                    row["單位 (Unit)"],
+                                    row["後綴 (Suffix)"],
+                                )
+                                label = f"{label_fmt} [{row['日期 (Date)']} {row['測量時間']}]"
+                                st.checkbox(
+                                    label,
+                                    value=st.session_state.get(f"chk_a_{uid}", True),
+                                    key=f"chk_a_{uid}",
+                                )
+
+                checked_a = [u for u in all_uids_a if st.session_state.get(f"chk_a_{u}", True)]
                 st.caption(f"已選取 {len(checked_a)} 組樣品")
                 st.markdown("</div>", unsafe_allow_html=True)
 
+            # 右側預覽與打包下載
             with col_view_a:
                 st.markdown(
                     """
                     <div class="workspace-card">
-                        <div class="card-header">即時預覽勾選樣品</div>
+                        <div class="card-header">樣品預覽與打包下載</div>
                     """,
                     unsafe_allow_html=True,
                 )
 
                 if checked_a:
-                    for preview_uid in checked_a:
-                        p_row = selected_df[
-                            selected_df["UID"] == preview_uid
-                        ].iloc[0]
-                        p_d = p_row["日期 (Date)"]
-                        p_comp = p_row["化合物 (Compound)"]
-                        p_label = build_sample_label(
-                            p_comp,
-                            p_row["劑量 (Dose)"],
-                            p_row["單位 (Unit)"],
-                            p_row["後綴 (Suffix)"],
-                        )
+                    st.info(f"目前共選取 **{len(checked_a)}** 組樣品。")
 
-                        fig, ax = plt.subplots(figsize=(8.5, 4.8), dpi=150)
-                        sources = []
-
-                        if not is_superoxide and p_d in anchor_settings:
-                            b_uid = anchor_settings[p_d]["Basal"]
-                            b_row = selected_df[
-                                selected_df["UID"] == b_uid
+                    with st.expander("展開即時預覽 (僅展示前 2 組)", expanded=False):
+                        for preview_uid in checked_a[:2]:
+                            p_row = selected_df[
+                                selected_df["UID"] == preview_uid
                             ].iloc[0]
-                            b_df = st.session_state.parsed_data[b_uid]["df"]
-                            ax.plot(
-                                b_df["Time"],
-                                b_df["Abs"],
-                                label="Basal (basal)",
-                                color="#2ca02c",
-                                linewidth=1.8,
-                            )
-                            sources.append(
-                                f" • Basal: {b_row['來源檔名']} ({b_row['測量時間']})"
+                            p_d = p_row["日期 (Date)"]
+                            p_comp = p_row["化合物 (Compound)"]
+                            p_label = build_sample_label(
+                                p_comp,
+                                p_row["劑量 (Dose)"],
+                                p_row["單位 (Unit)"],
+                                p_row["後綴 (Suffix)"],
                             )
 
-                        if p_d in anchor_settings:
-                            c_uid = anchor_settings[p_d]["Control"]
-                            c_row = selected_df[
-                                selected_df["UID"] == c_uid
-                            ].iloc[0]
-                            c_df = st.session_state.parsed_data[c_uid]["df"]
-                            ax.plot(
-                                c_df["Time"],
-                                c_df["Abs"],
-                                label="Control (control)",
-                                color="#d62728",
-                                linewidth=2.0,
-                            )
-                            sources.append(
-                                f" • Control: {c_row['來源檔名']} ({c_row['測量時間']})"
-                            )
+                            fig, ax = plt.subplots(figsize=(8, 4.2), dpi=120)
+                            if not is_superoxide and p_d in anchor_settings:
+                                b_uid = anchor_settings[p_d]["Basal"]
+                                b_df = st.session_state.parsed_data[b_uid]["df"]
+                                ax.plot(b_df["Time"], b_df["Abs"], label="Basal", color="#2ca02c")
+                            if p_d in anchor_settings:
+                                c_uid = anchor_settings[p_d]["Control"]
+                                c_df = st.session_state.parsed_data[c_uid]["df"]
+                                ax.plot(c_df["Time"], c_df["Abs"], label="Control", color="#d62728")
+                            s_df = st.session_state.parsed_data[preview_uid]["df"]
+                            ax.plot(s_df["Time"], s_df["Abs"], label=p_label, color="#1f77b4")
 
-                        s_df = st.session_state.parsed_data[preview_uid]["df"]
-                        ax.plot(
-                            s_df["Time"],
-                            s_df["Abs"],
-                            label=f"{p_label}",
-                            color="#1f77b4",
-                            linewidth=2.0,
-                        )
-                        sources.append(
-                            f" • Sample: {p_row['來源檔名']} ({p_row['測量時間']})"
-                        )
-
-                        ax.axvline(
-                            x=120, color="#94a3b8", linestyle=":", alpha=0.7
-                        )
-                        ax.axvline(
-                            x=240, color="#94a3b8", linestyle=":", alpha=0.7
-                        )
-                        ax.axvline(
-                            x=420, color="#94a3b8", linestyle=":", alpha=0.7
-                        )
-
-                        ax.text(
-                            120,
-                            1.01,
-                            "Drug (2')",
-                            transform=ax.get_xaxis_transform(),
-                            fontsize=8.5,
-                            color="#475569",
-                            ha="center",
-                            va="bottom",
-                            fontweight="bold",
-                        )
-                        ax.text(
-                            240,
-                            1.01,
-                            "CB (4')",
-                            transform=ax.get_xaxis_transform(),
-                            fontsize=8.5,
-                            color="#475569",
-                            ha="center",
-                            va="bottom",
-                            fontweight="bold",
-                        )
-                        ax.text(
-                            420,
-                            1.01,
-                            "fMLF (7')",
-                            transform=ax.get_xaxis_transform(),
-                            fontsize=8.5,
-                            color="#475569",
-                            ha="center",
-                            va="bottom",
-                            fontweight="bold",
-                        )
-
-                        ax.set_xlabel("Time (s)", fontweight="bold")
-                        ax.set_ylabel(ylabel_text, fontweight="bold")
-
-                        # 固定 Y 軸範圍與刻度間距
-                        ax.set_ylim(y_min, y_max)
-                        ax.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
-                        ax.yaxis.set_major_formatter(
-                            ticker.FormatStrFormatter("%.1f")
-                        )
-
-                        ax.set_title(
-                            f"{assay_label}: {p_label} ({p_d})",
-                            fontsize=11,
-                            fontweight="bold",
-                            pad=18,
-                        )
-                        ax.legend(
-                            frameon=True,
-                            facecolor="white",
-                            edgecolor="#cbd5e1",
-                            fontsize=8.5,
-                            loc="upper left",
-                        )
-                        ax.grid(True, linestyle="--", alpha=0.3)
-
-                        source_box_str = "Source Files:\n" + "\n".join(sources)
-                        line_cnt = len(sources) + 1
-                        bottom_margin = max(0.22, 0.10 + 0.035 * line_cnt)
-                        plt.subplots_adjust(bottom=bottom_margin)
-
-                        fig.text(
-                            0.12,
-                            0.02,
-                            source_box_str,
-                            fontsize=7.5,
-                            color="#444444",
-                            ha="left",
-                            va="bottom",
-                            bbox=dict(
-                                boxstyle="round,pad=0.3",
-                                facecolor="#f9f9f9",
-                                edgecolor="#dddddd",
-                                alpha=0.8,
-                            ),
-                        )
-                        st.pyplot(fig)
-                        plt.close(fig)
+                            ax.set_ylim(y_min, y_max)
+                            ax.set_title(f"預覽: {p_label} ({p_d})", fontsize=10)
+                            ax.legend(loc="upper left", fontsize=8)
+                            st.pyplot(fig)
+                            plt.close(fig)
 
                     if st.button(
-                        f"批量生成並打包全部 ({len(checked_a)} 張高解析圖表)",
+                        f"開始批量打包全部 ({len(checked_a)} 張高解析圖表)",
                         use_container_width=True,
                     ):
+                        progress_bar = st.progress(0, text="正在批量繪製並寫入壓縮檔...")
                         zip_buffer = io.BytesIO()
-                        with zipfile.ZipFile(
-                            zip_buffer, "w", zipfile.ZIP_DEFLATED
-                        ) as zip_file:
-                            for uid in checked_a:
-                                row = selected_df[
-                                    selected_df["UID"] == uid
-                                ].iloc[0]
+
+                        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                            total = len(checked_a)
+                            for idx, uid in enumerate(checked_a):
+                                row = selected_df[selected_df["UID"] == uid].iloc[0]
                                 d = row["日期 (Date)"]
                                 comp = row["化合物 (Compound)"]
+                                ch_idx = st.session_state.parsed_data[uid]["ch_idx"]
+                                
                                 label_text = build_sample_label(
                                     comp,
                                     row["劑量 (Dose)"],
@@ -1495,212 +1418,84 @@ if not st.session_state.df_meta.empty:
                                     row["後綴 (Suffix)"],
                                 )
 
-                                fig, ax = plt.subplots(
-                                    figsize=(9.5, 6.2), dpi=300
-                                )
+                                fig, ax = plt.subplots(figsize=(9, 5.8), dpi=180)
                                 sources = []
 
                                 if not is_superoxide and d in anchor_settings:
                                     b_uid = anchor_settings[d]["Basal"]
-                                    b_row = selected_df[
-                                        selected_df["UID"] == b_uid
-                                    ].iloc[0]
-                                    b_df = st.session_state.parsed_data[b_uid][
-                                        "df"
-                                    ]
-                                    ax.plot(
-                                        b_df["Time"],
-                                        b_df["Abs"],
-                                        label="Basal (basal)",
-                                        color="#2ca02c",
-                                        linewidth=2.0,
-                                    )
-                                    sources.append(
-                                        f" • Basal: {b_row['來源檔名']} ({b_row['測量時間']})"
-                                    )
+                                    b_row = selected_df[selected_df["UID"] == b_uid].iloc[0]
+                                    b_df = st.session_state.parsed_data[b_uid]["df"]
+                                    ax.plot(b_df["Time"], b_df["Abs"], label="Basal (basal)", color="#2ca02c", linewidth=1.8)
+                                    sources.append(f" • Basal: {b_row['來源檔名']} ({b_row['測量時間']})")
 
                                 if d in anchor_settings:
                                     c_uid = anchor_settings[d]["Control"]
-                                    c_row = selected_df[
-                                        selected_df["UID"] == c_uid
-                                    ].iloc[0]
-                                    c_df = st.session_state.parsed_data[c_uid][
-                                        "df"
-                                    ]
-                                    ax.plot(
-                                        c_df["Time"],
-                                        c_df["Abs"],
-                                        label="Control (control)",
-                                        color="#d62728",
-                                        linewidth=2.2,
-                                    )
-                                    sources.append(
-                                        f" • Control: {c_row['來源檔名']} ({c_row['測量時間']})"
-                                    )
+                                    c_row = selected_df[selected_df["UID"] == c_uid].iloc[0]
+                                    c_df = st.session_state.parsed_data[c_uid]["df"]
+                                    ax.plot(c_df["Time"], c_df["Abs"], label="Control (control)", color="#d62728", linewidth=2.0)
+                                    sources.append(f" • Control: {c_row['來源檔名']} ({c_row['測量時間']})")
 
                                 s_df = st.session_state.parsed_data[uid]["df"]
-                                ax.plot(
-                                    s_df["Time"],
-                                    s_df["Abs"],
-                                    label=f"{label_text}",
-                                    color="#1f77b4",
-                                    linewidth=2.2,
-                                )
-                                sources.append(
-                                    f" • Sample: {row['來源檔名']} ({row['測量時間']})"
-                                )
+                                ax.plot(s_df["Time"], s_df["Abs"], label=label_text, color="#1f77b4", linewidth=2.0)
+                                sources.append(f" • Sample: {row['來源檔名']} ({row['測量時間']})")
 
-                                ax.axvline(
-                                    x=120,
-                                    color="#94a3b8",
-                                    linestyle=":",
-                                    alpha=0.7,
-                                )
-                                ax.axvline(
-                                    x=240,
-                                    color="#94a3b8",
-                                    linestyle=":",
-                                    alpha=0.7,
-                                )
-                                ax.axvline(
-                                    x=420,
-                                    color="#94a3b8",
-                                    linestyle=":",
-                                    alpha=0.7,
-                                )
+                                ax.axvline(x=120, color="#94a3b8", linestyle=":", alpha=0.7)
+                                ax.axvline(x=240, color="#94a3b8", linestyle=":", alpha=0.7)
+                                ax.axvline(x=420, color="#94a3b8", linestyle=":", alpha=0.7)
 
-                                ax.text(
-                                    120,
-                                    1.01,
-                                    "Drug (2')",
-                                    transform=ax.get_xaxis_transform(),
-                                    fontsize=9,
-                                    color="#475569",
-                                    ha="center",
-                                    va="bottom",
-                                    fontweight="bold",
-                                )
-                                ax.text(
-                                    240,
-                                    1.01,
-                                    "CB (4')",
-                                    transform=ax.get_xaxis_transform(),
-                                    fontsize=9,
-                                    color="#475569",
-                                    ha="center",
-                                    va="bottom",
-                                    fontweight="bold",
-                                )
-                                ax.text(
-                                    420,
-                                    1.01,
-                                    "fMLF (7')",
-                                    transform=ax.get_xaxis_transform(),
-                                    fontsize=9,
-                                    color="#475569",
-                                    ha="center",
-                                    va="bottom",
-                                    fontweight="bold",
-                                )
-
-                                ax.set_xlabel(
-                                    "Time (s)", fontsize=11, fontweight="bold"
-                                )
-                                ax.set_ylabel(
-                                    ylabel_text, fontsize=11, fontweight="bold"
-                                )
-
-                                # 固定 Y 軸範圍與刻度間距
+                                ax.set_xlabel("Time (s)", fontsize=10, fontweight="bold")
+                                ax.set_ylabel(ylabel_text, fontsize=10, fontweight="bold")
                                 ax.set_ylim(y_min, y_max)
-                                ax.yaxis.set_major_locator(
-                                    ticker.MultipleLocator(0.1)
-                                )
-                                ax.yaxis.set_major_formatter(
-                                    ticker.FormatStrFormatter("%.1f")
-                                )
+                                ax.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
+                                ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.1f"))
 
-                                ax.set_title(
-                                    f"{assay_label}: {label_text} ({d})",
-                                    fontsize=13,
-                                    fontweight="bold",
-                                    pad=18,
-                                )
-                                ax.grid(True, linestyle="--", alpha=0.5)
-                                ax.legend(
-                                    frameon=True,
-                                    facecolor="white",
-                                    edgecolor="#cbd5e1",
-                                    framealpha=0.9,
-                                    fontsize=9.5,
-                                    loc="upper left",
-                                )
+                                ax.set_title(f"{assay_label}: {label_text} ({d})", fontsize=12, fontweight="bold", pad=15)
+                                ax.grid(True, linestyle="--", alpha=0.4)
+                                ax.legend(frameon=True, facecolor="white", edgecolor="#cbd5e1", fontsize=9, loc="upper left")
 
-                                source_box_str = "Source Files:\n" + "\n".join(
-                                    sources
-                                )
+                                source_box_str = "Source Files:\n" + "\n".join(sources)
                                 line_cnt = len(sources) + 1
-                                bottom_margin = max(
-                                    0.20, 0.08 + 0.03 * line_cnt
-                                )
+                                bottom_margin = max(0.20, 0.08 + 0.03 * line_cnt)
                                 plt.subplots_adjust(bottom=bottom_margin)
 
                                 fig.text(
-                                    0.12,
-                                    0.02,
-                                    source_box_str,
-                                    fontsize=8,
-                                    color="#444444",
-                                    ha="left",
-                                    va="bottom",
-                                    bbox=dict(
-                                        boxstyle="round,pad=0.3",
-                                        facecolor="#f9f9f9",
-                                        edgecolor="#dddddd",
-                                        alpha=0.8,
-                                    ),
+                                    0.12, 0.02, source_box_str,
+                                    fontsize=7.5, color="#444444", ha="left", va="bottom",
+                                    bbox=dict(boxstyle="round,pad=0.3", facecolor="#f9f9f9", edgecolor="#dddddd", alpha=0.8)
                                 )
 
                                 img_bytes = io.BytesIO()
-                                plt.savefig(
-                                    img_bytes,
-                                    format="png",
-                                    dpi=300,
-                                    bbox_inches="tight",
-                                )
+                                fig.savefig(img_bytes, format="png", bbox_inches="tight")
                                 plt.close(fig)
 
-                                time_clean = str(row["測量時間"]).replace(
-                                    ":", ""
-                                )
-                                base_fname = os.path.splitext(
-                                    row["來源檔名"]
-                                )[0]
-                                dose_str = (
-                                    f"{row['劑量 (Dose)']} {row['單位 (Unit)']}"
-                                    if str(row["劑量 (Dose)"]).strip() != "0"
-                                    else ""
-                                )
-
+                                # 檔名加入序號與 Channel 防重複覆蓋
+                                time_clean = str(row["測量時間"]).replace(":", "")
+                                base_fname = os.path.splitext(row["來源檔名"])[0]
+                                dose_str = f"{row['劑量 (Dose)']}{row['單位 (Unit)']}" if str(row["劑量 (Dose)"]).strip() != "0" else ""
+                                
                                 parts = [
+                                    f"[{idx+1:03d}]",
                                     comp,
                                     dose_str,
+                                    f"ch{ch_idx}",
                                     time_clean,
-                                    base_fname,
+                                    base_fname
                                 ]
-                                img_filename = (
-                                    "_".join([p for p in parts if p]).strip()
-                                    + ".png"
-                                )
-                                img_filename = re.sub(
-                                    r'[\\/*?:"<>|]', "_", img_filename
-                                )
-                                zip_file.writestr(
-                                    img_filename, img_bytes.getvalue()
-                                )
+                                img_filename = "_".join([p for p in parts if p]).strip() + ".png"
+                                img_filename = re.sub(r'[\\/*?:"<>|]', "_", img_filename)
 
+                                zip_file.writestr(img_filename, img_bytes.getvalue())
+                                progress_bar.progress((idx + 1) / total, text=f"進度: {idx + 1}/{total} 張")
+
+                        progress_bar.empty()
+                        st.session_state.zip_data_bundle = zip_buffer.getvalue()
+                        st.session_state.zip_count = total
+
+                    if "zip_data_bundle" in st.session_state:
+                        st.success(f"已成功打包 {st.session_state.zip_count} 張圖表！")
                         st.download_button(
-                            "下載所有圖檔打包 ZIP",
-                            data=zip_buffer.getvalue(),
+                            label=f"下載完整 ZIP 檔 ({st.session_state.zip_count} 張圖)",
+                            data=st.session_state.zip_data_bundle,
                             file_name=f"{assay_label.split()[0]}_Plots_Bundle.zip",
                             mime="application/zip",
                             use_container_width=True,
@@ -1940,26 +1735,11 @@ if not st.session_state.df_meta.empty:
                 if selected_plot_pairs:
                     fig, ax = plt.subplots(figsize=(9, 5.5), dpi=150)
                     high_contrast_colors = [
-                        "#1f77b4",
-                        "#d62728",
-                        "#2ca02c",
-                        "#9467bd",
-                        "#ff7f0e",
-                        "#8c564b",
-                        "#e377c2",
-                        "#17becf",
-                        "#bcbd22",
-                        "#393b79",
-                        "#637939",
-                        "#8c6d31",
-                        "#843c39",
-                        "#7b4173",
-                        "#3182bd",
-                        "#31a354",
-                        "#e6550d",
-                        "#756bb1",
-                        "#005a32",
-                        "#99000d",
+                        "#1f77b4", "#d62728", "#2ca02c", "#9467bd",
+                        "#ff7f0e", "#8c564b", "#e377c2", "#17becf",
+                        "#bcbd22", "#393b79", "#637939", "#8c6d31",
+                        "#843c39", "#7b4173", "#3182bd", "#31a354",
+                        "#e6550d", "#756bb1", "#005a32", "#99000d",
                     ]
                     colors = [
                         high_contrast_colors[i % len(high_contrast_colors)]
@@ -2028,8 +1808,7 @@ if not st.session_state.df_meta.empty:
                             plot_values = df_main["Abs"]
                             final_label = label_main
                             source_texts.append(
-                                f"• {final_label}: {row_main['來源檔名']}"
-                                f" ({row_main['測量時間']})"
+                                f"• {final_label}: {row_main['來源檔名']} ({row_main['測量時間']})"
                             )
 
                         ax.plot(
@@ -2073,66 +1852,21 @@ if not st.session_state.df_meta.empty:
                                 fontsize=8,
                             )
 
-                    ax.axvline(
-                        x=120, color="#94a3b8", linestyle=":", alpha=0.7
-                    )
-                    ax.axvline(
-                        x=240, color="#94a3b8", linestyle=":", alpha=0.7
-                    )
-                    ax.axvline(
-                        x=420, color="#94a3b8", linestyle=":", alpha=0.7
-                    )
+                    ax.axvline(x=120, color="#94a3b8", linestyle=":", alpha=0.7)
+                    ax.axvline(x=240, color="#94a3b8", linestyle=":", alpha=0.7)
+                    ax.axvline(x=420, color="#94a3b8", linestyle=":", alpha=0.7)
 
-                    ax.text(
-                        120,
-                        1.01,
-                        "Drug (2')",
-                        transform=ax.get_xaxis_transform(),
-                        fontsize=8.5,
-                        color="#475569",
-                        ha="center",
-                        va="bottom",
-                        fontweight="bold",
-                    )
-                    ax.text(
-                        240,
-                        1.01,
-                        "CB (4')",
-                        transform=ax.get_xaxis_transform(),
-                        fontsize=8.5,
-                        color="#475569",
-                        ha="center",
-                        va="bottom",
-                        fontweight="bold",
-                    )
-                    ax.text(
-                        420,
-                        1.01,
-                        "fMLF (7')",
-                        transform=ax.get_xaxis_transform(),
-                        fontsize=8.5,
-                        color="#475569",
-                        ha="center",
-                        va="bottom",
-                        fontweight="bold",
-                    )
+                    ax.text(120, 1.01, "Drug (2')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                    ax.text(240, 1.01, "CB (4')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                    ax.text(420, 1.01, "fMLF (7')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
 
                     ax.set_xlabel("Time (s)", fontweight="bold", fontsize=10)
                     ax.set_ylabel(ylabel_text, fontweight="bold", fontsize=10)
-
-                    # 固定 Y 軸範圍與刻度間距
                     ax.set_ylim(y_min, y_max)
                     ax.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
-                    ax.yaxis.set_major_formatter(
-                        ticker.FormatStrFormatter("%.1f")
-                    )
+                    ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.1f"))
 
-                    ax.set_title(
-                        f"{assay_label} - Kinetics Overlay",
-                        fontweight="bold",
-                        fontsize=12,
-                        pad=18,
-                    )
+                    ax.set_title(f"{assay_label} - Kinetics Overlay", fontweight="bold", fontsize=12, pad=18)
                     ax.spines["top"].set_visible(False)
                     ax.spines["right"].set_visible(False)
                     ax.grid(True, linestyle="--", alpha=0.4)
@@ -2144,27 +1878,16 @@ if not st.session_state.df_meta.empty:
                     plt.subplots_adjust(bottom=bot_padding)
 
                     fig.text(
-                        0.12,
-                        0.02,
+                        0.12, 0.02,
                         "Source Files:\n" + "\n".join(source_texts),
-                        fontsize=7.5,
-                        color="#444444",
-                        ha="left",
-                        va="bottom",
-                        bbox=dict(
-                            facecolor="#f9f9f9",
-                            edgecolor="#dddddd",
-                            alpha=0.8,
-                            boxstyle="round,pad=0.3",
-                        ),
+                        fontsize=7.5, color="#444444", ha="left", va="bottom",
+                        bbox=dict(facecolor="#f9f9f9", edgecolor="#dddddd", alpha=0.8, boxstyle="round,pad=0.3")
                     )
 
                     st.pyplot(fig)
 
                     img_buf = io.BytesIO()
-                    fig.savefig(
-                        img_buf, format="png", bbox_inches="tight", dpi=300
-                    )
+                    fig.savefig(img_buf, format="png", bbox_inches="tight", dpi=300)
                     plt.close(fig)
 
                     now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
