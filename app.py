@@ -876,7 +876,7 @@ if not st.session_state.df_meta.empty:
         st.markdown("</div>", unsafe_allow_html=True)
 
     # -------------------------------------------------------------
-    # 分頁 2: 結算與匯出 Excel
+    # 分頁 2: 結算與匯出 Excel (修改：拆分 SAMPLE、劑量、單位)
     # -------------------------------------------------------------
     selected_df = st.session_state.df_meta[
         st.session_state.df_meta["選取"] == True
@@ -990,6 +990,8 @@ if not st.session_state.df_meta.empty:
                                     d,
                                     b_info["來源檔名"],
                                     "basal",
+                                    "-",
+                                    "-",
                                     round(calc_dict[b_uid]["min"], 4),
                                     round(calc_dict[b_uid]["max"], 4),
                                     round(b_diff, 4),
@@ -1005,6 +1007,8 @@ if not st.session_state.df_meta.empty:
                                     d,
                                     c_info["來源檔名"],
                                     "control",
+                                    "-",
+                                    "-",
                                     round(calc_dict[c_uid]["min"], 4),
                                     round(calc_dict[c_uid]["max"], 4),
                                     round(c_diff, 4),
@@ -1020,6 +1024,8 @@ if not st.session_state.df_meta.empty:
                                     d,
                                     c_info["來源檔名"],
                                     "control",
+                                    "-",
+                                    "-",
                                     round(calc_dict[c_uid]["min"], 4),
                                     round(calc_dict[c_uid]["max"], 4),
                                     round(c_diff, 4),
@@ -1041,6 +1047,17 @@ if not st.session_state.df_meta.empty:
                                 else ""
                             )
                             has_special_suffix = bool(suffix_str)
+
+                            # 樣品名稱欄位（若有特殊標籤如 alone 則標示於名稱）
+                            sample_name_cell = str(comp)
+                            if has_special_suffix:
+                                suf_clean = re.sub(r"[\(\)]", "", suffix_str).strip()
+                                if suf_clean:
+                                    sample_name_cell = f"{sample_name_cell} ({suf_clean})"
+
+                            # 劑量與單位獨立取值
+                            dose_cell = row["劑量 (Dose)"]
+                            unit_cell = row["單位 (Unit)"]
 
                             label_text = build_sample_label(
                                 comp,
@@ -1072,7 +1089,9 @@ if not st.session_state.df_meta.empty:
                                         [
                                             d,
                                             row["來源檔名"],
-                                            label_text,
+                                            sample_name_cell,
+                                            dose_cell,
+                                            unit_cell,
                                             round(
                                                 calc_dict[uid]["min"], 4
                                             ),
@@ -1105,7 +1124,9 @@ if not st.session_state.df_meta.empty:
                                         [
                                             d,
                                             row["來源檔名"],
-                                            label_text,
+                                            sample_name_cell,
+                                            dose_cell,
+                                            unit_cell,
                                             round(
                                                 calc_dict[uid]["min"], 4
                                             ),
@@ -1133,10 +1154,13 @@ if not st.session_state.df_meta.empty:
                             ws.append(r_vals)
                     else:
                         ws = wb.create_sheet(title=clean_sheet_title)
+                        # 表頭將原本的 Sample 擴展為 Date, File Name, SAMPLE, Dose, Unit
                         headers = [
                             "Date",
                             "File Name",
-                            "Sample",
+                            "SAMPLE",
+                            "Dose",
+                            "Unit",
                             "Min",
                             "Max",
                             "Max - Min",
@@ -1147,7 +1171,7 @@ if not st.session_state.df_meta.empty:
                             "Inhibition (%)",
                         ]
                         ws.append(
-                            [f"Assay: {assay_type}", f"Compound: {comp}", "", ""]
+                            [f"Assay: {assay_type}", f"Compound: {comp}", "", "", ""]
                         )
                         ws.append(
                             [
