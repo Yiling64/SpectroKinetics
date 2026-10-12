@@ -199,14 +199,6 @@ st.markdown(CUSTOM_UI_CSS, unsafe_allow_html=True)
 
 
 # ================= 輔助函式 =================
-def fmt_time(sec):
-    """將秒數轉換為 分:秒 (如 420 -> 7:00, 440 -> 7:20)"""
-    sec = max(0, int(round(sec)))
-    m = sec // 60
-    s = sec % 60
-    return f"{m}:{s:02d}"
-
-
 def build_sample_label(comp, dose, unit, suffix):
     comp_str = str(comp).strip()
     if any(
@@ -884,7 +876,7 @@ if not st.session_state.df_meta.empty:
         st.markdown("</div>", unsafe_allow_html=True)
 
     # -------------------------------------------------------------
-    # 分頁 2: 結算與匯出 Excel (拆分 SAMPLE、Dose、Unit)
+    # 分頁 2: 結算與匯出 Excel (修改：拆分 SAMPLE、劑量、單位)
     # -------------------------------------------------------------
     selected_df = st.session_state.df_meta[
         st.session_state.df_meta["選取"] == True
@@ -962,7 +954,7 @@ if not st.session_state.df_meta.empty:
 
                 for comp in compounds:
                     clean_sheet_title = re.sub(
-                        r"[\:\\/\?\*\[\]]", "_", str(comp)
+                        r"[\:\/\?\*\[\]]", "_", str(comp)
                     )[:31].strip()
                     if not clean_sheet_title:
                         clean_sheet_title = "Sheet"
@@ -1056,12 +1048,14 @@ if not st.session_state.df_meta.empty:
                             )
                             has_special_suffix = bool(suffix_str)
 
+                            # 樣品名稱欄位（若有特殊標籤如 alone 則標示於名稱）
                             sample_name_cell = str(comp)
                             if has_special_suffix:
                                 suf_clean = re.sub(r"[\(\)]", "", suffix_str).strip()
                                 if suf_clean:
                                     sample_name_cell = f"{sample_name_cell} ({suf_clean})"
 
+                            # 劑量與單位獨立取值
                             dose_cell = row["劑量 (Dose)"]
                             unit_cell = row["單位 (Unit)"]
 
@@ -1160,6 +1154,7 @@ if not st.session_state.df_meta.empty:
                             ws.append(r_vals)
                     else:
                         ws = wb.create_sheet(title=clean_sheet_title)
+                        # 表頭將原本的 Sample 擴展為 Date, File Name, SAMPLE, Dose, Unit
                         headers = [
                             "Date",
                             "File Name",
@@ -1420,22 +1415,26 @@ if not st.session_state.df_meta.empty:
                             s_df = st.session_state.parsed_data[preview_uid]["df"]
                             ax.plot(s_df["Time"], s_df["Abs"], label=p_label, color="#1f77b4")
 
-                            # 預覽同步加上動態虛線與標註
+                            # 預覽同步加上虛線與外框上方文字
                             p_ch_offset = (p_ch_idx - 1) * t_interval
                             p_t_fmlp = t_start + p_ch_offset
                             p_t_cb = p_t_fmlp - 180
                             p_t_drug = p_t_fmlp - 300
 
+                            def _fmt_p(sec):
+                                sec = max(0, int(round(sec)))
+                                return f"{sec // 60}:{sec % 60:02d}"
+
                             ax.axvline(x=p_t_drug, color="#94a3b8", linestyle=":", alpha=0.7)
                             ax.axvline(x=p_t_cb, color="#94a3b8", linestyle=":", alpha=0.7)
                             ax.axvline(x=p_t_fmlp, color="#94a3b8", linestyle=":", alpha=0.7)
 
-                            ax.text(p_t_drug, 0.98, f"Drug ({fmt_time(p_t_drug)})", transform=ax.get_xaxis_transform(), fontsize=8, color="#475569", ha="center", va="top", fontweight="bold")
-                            ax.text(p_t_cb, 0.98, f"CB ({fmt_time(p_t_cb)})", transform=ax.get_xaxis_transform(), fontsize=8, color="#475569", ha="center", va="top", fontweight="bold")
-                            ax.text(p_t_fmlp, 0.98, f"fMLF ({fmt_time(p_t_fmlp)})", transform=ax.get_xaxis_transform(), fontsize=8, color="#475569", ha="center", va="top", fontweight="bold")
+                            ax.text(p_t_drug, 1.01, f"Drug ({_fmt_p(p_t_drug)})", transform=ax.get_xaxis_transform(), fontsize=8, color="#475569", ha="center", va="bottom", fontweight="bold")
+                            ax.text(p_t_cb, 1.01, f"CB ({_fmt_p(p_t_cb)})", transform=ax.get_xaxis_transform(), fontsize=8, color="#475569", ha="center", va="bottom", fontweight="bold")
+                            ax.text(p_t_fmlp, 1.01, f"fMLF ({_fmt_p(p_t_fmlp)})", transform=ax.get_xaxis_transform(), fontsize=8, color="#475569", ha="center", va="bottom", fontweight="bold")
 
                             ax.set_ylim(y_min, y_max)
-                            ax.set_title(f"預覽: {p_label} ({p_d})", fontsize=10)
+                            ax.set_title(f"預覽: {p_label} ({p_d})", fontsize=10, pad=26)
                             ax.legend(loc="upper left", fontsize=8)
                             st.pyplot(fig)
                             plt.close(fig)
@@ -1483,21 +1482,25 @@ if not st.session_state.df_meta.empty:
                                 ax.plot(s_df["Time"], s_df["Abs"], label=label_text, color="#1f77b4", linewidth=2.0)
                                 sources.append(f" • Sample: {row['來源檔名']} ({row['測量時間']})")
 
-                                # 依據樣品的 ch_idx 與側邊欄設定動態計算三個時間點
+                                # 動態計算該管實際時間點 (模式 A 保留真實時間軸)
                                 ch_offset = (ch_idx - 1) * t_interval
                                 t_fmlp_cur = t_start + ch_offset
                                 t_cb_cur = t_fmlp_cur - 180
                                 t_drug_cur = t_fmlp_cur - 300
+
+                                def _fmt_a(sec):
+                                    sec = max(0, int(round(sec)))
+                                    return f"{sec // 60}:{sec % 60:02d}"
 
                                 # 繪製動態虛線
                                 ax.axvline(x=t_drug_cur, color="#94a3b8", linestyle=":", alpha=0.7)
                                 ax.axvline(x=t_cb_cur, color="#94a3b8", linestyle=":", alpha=0.7)
                                 ax.axvline(x=t_fmlp_cur, color="#94a3b8", linestyle=":", alpha=0.7)
 
-                                # 動態標註（文字秒數自動換算，置於 y=0.98 避開標題重疊）
-                                ax.text(t_drug_cur, 0.98, f"Drug ({fmt_time(t_drug_cur)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="top", fontweight="bold")
-                                ax.text(t_cb_cur, 0.98, f"CB ({fmt_time(t_cb_cur)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="top", fontweight="bold")
-                                ax.text(t_fmlp_cur, 0.98, f"fMLF ({fmt_time(t_fmlp_cur)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="top", fontweight="bold")
+                                # 標籤放在框框外正上方 (y=1.01, va="bottom")，不放進圖框內
+                                ax.text(t_drug_cur, 1.01, f"Drug ({_fmt_a(t_drug_cur)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                                ax.text(t_cb_cur, 1.01, f"CB ({_fmt_a(t_cb_cur)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                                ax.text(t_fmlp_cur, 1.01, f"fMLF ({_fmt_a(t_fmlp_cur)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
 
                                 ax.set_xlabel("Time (s)", fontsize=10, fontweight="bold")
                                 ax.set_ylabel(ylabel_text, fontsize=10, fontweight="bold")
@@ -1505,7 +1508,8 @@ if not st.session_state.df_meta.empty:
                                 ax.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
                                 ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.1f"))
 
-                                ax.set_title(f"{assay_label}: {label_text} ({d})", fontsize=12, fontweight="bold", pad=15)
+                                # 標題高度拉高至 pad=28，完全不擋到標籤
+                                ax.set_title(f"{assay_label}: {label_text} ({d})", fontsize=12, fontweight="bold", pad=28)
                                 ax.grid(True, linestyle="--", alpha=0.4)
                                 ax.legend(frameon=True, facecolor="white", edgecolor="#cbd5e1", fontsize=9, loc="upper left")
 
@@ -1815,6 +1819,10 @@ if not st.session_state.df_meta.empty:
                             "df"
                         ].copy()
 
+                        # 🌟 核心關鍵：主曲線時間左移對齊回 Channel 1 (扣除通道延遲)
+                        ch_idx_main = st.session_state.parsed_data[uid_main]["ch_idx"]
+                        df_main["Time"] = df_main["Time"] - (ch_idx_main - 1) * t_interval
+
                         label_main_fmt = build_sample_label(
                             row_main["化合物 (Compound)"],
                             row_main["劑量 (Dose)"],
@@ -1835,6 +1843,11 @@ if not st.session_state.df_meta.empty:
                             row_sub = selected_df[
                                 selected_df["UID"] == uid_sub
                             ].iloc[0]
+
+                            # 🌟 核心關鍵：對照曲線同步左移對齊
+                            ch_idx_sub = st.session_state.parsed_data[uid_sub]["ch_idx"]
+                            df_sub["Time"] = df_sub["Time"] - (ch_idx_sub - 1) * t_interval
+
                             merged_df = pd.merge_asof(
                                 df_main.sort_values("Time"),
                                 df_sub.sort_values("Time"),
@@ -1908,20 +1921,24 @@ if not st.session_state.df_meta.empty:
                                 fontsize=8,
                             )
 
-                    # 依據側邊欄 t_start 動態計算基準時間點
+                    # 模式 B 基準時間點
                     t_fmlp_b = t_start
                     t_cb_b = t_start - 180
                     t_drug_b = t_start - 300
+
+                    def _fmt_b(sec):
+                        sec = max(0, int(round(sec)))
+                        return f"{sec // 60}:{sec % 60:02d}"
 
                     # 繪製動態虛線
                     ax.axvline(x=t_drug_b, color="#94a3b8", linestyle=":", alpha=0.7)
                     ax.axvline(x=t_cb_b, color="#94a3b8", linestyle=":", alpha=0.7)
                     ax.axvline(x=t_fmlp_b, color="#94a3b8", linestyle=":", alpha=0.7)
 
-                    # 動態文字標籤（統一呼叫 fmt_time，並置於 y=0.98 避免與標題重疊）
-                    ax.text(t_drug_b, 0.98, f"Drug ({fmt_time(t_drug_b)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="top", fontweight="bold")
-                    ax.text(t_cb_b, 0.98, f"CB ({fmt_time(t_cb_b)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="top", fontweight="bold")
-                    ax.text(t_fmlp_b, 0.98, f"fMLF ({fmt_time(t_fmlp_b)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="top", fontweight="bold")
+                    # 標籤放在框框外正上方 (y=1.01, va="bottom")，不放進圖框內
+                    ax.text(t_drug_b, 1.01, f"Drug ({_fmt_b(t_drug_b)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                    ax.text(t_cb_b, 1.01, f"CB ({_fmt_b(t_cb_b)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                    ax.text(t_fmlp_b, 1.01, f"fMLF ({_fmt_b(t_fmlp_b)})", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
 
                     ax.set_xlabel("Time (s)", fontweight="bold", fontsize=10)
                     ax.set_ylabel(ylabel_text, fontweight="bold", fontsize=10)
@@ -1929,7 +1946,8 @@ if not st.session_state.df_meta.empty:
                     ax.yaxis.set_major_locator(ticker.MultipleLocator(0.1))
                     ax.yaxis.set_major_formatter(ticker.FormatStrFormatter("%.1f"))
 
-                    ax.set_title(f"{assay_label} - Kinetics Overlay", fontweight="bold", fontsize=12, pad=18)
+                    # 標題拉高至 pad=28，完全不擋到標籤
+                    ax.set_title(f"{assay_label} - Kinetics Overlay", fontweight="bold", fontsize=12, pad=28)
                     ax.spines["top"].set_visible(False)
                     ax.spines["right"].set_visible(False)
                     ax.grid(True, linestyle="--", alpha=0.4)
