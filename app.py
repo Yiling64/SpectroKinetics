@@ -1463,9 +1463,21 @@ if not st.session_state.df_meta.empty:
                                 ax.plot(s_df["Time"], s_df["Abs"], label=label_text, color="#1f77b4", linewidth=2.0)
                                 sources.append(f" • Sample: {row['來源檔名']} ({row['測量時間']})")
 
-                                ax.axvline(x=120, color="#94a3b8", linestyle=":", alpha=0.7)
-                                ax.axvline(x=240, color="#94a3b8", linestyle=":", alpha=0.7)
-                                ax.axvline(x=420, color="#94a3b8", linestyle=":", alpha=0.7)
+                                # 依據樣品的 ch_idx 與側邊欄設定動態計算三個時間點
+                                ch_offset = (ch_idx - 1) * t_interval
+                                t_fmlp_cur = t_start + ch_offset
+                                t_cb_cur = t_fmlp_cur - 180
+                                t_drug_cur = t_fmlp_cur - 300
+
+                                # 繪製動態虛線
+                                ax.axvline(x=t_drug_cur, color="#94a3b8", linestyle=":", alpha=0.7)
+                                ax.axvline(x=t_cb_cur, color="#94a3b8", linestyle=":", alpha=0.7)
+                                ax.axvline(x=t_fmlp_cur, color="#94a3b8", linestyle=":", alpha=0.7)
+
+                                # 動態標註（文字與分鐘數自動換算）
+                                ax.text(t_drug_cur, 1.01, f"Drug ({int(t_drug_cur//60)}')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                                ax.text(t_cb_cur, 1.01, f"CB ({int(t_cb_cur//60)}')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                                ax.text(t_fmlp_cur, 1.01, f"fMLF ({int(t_fmlp_cur//60)}')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
 
                                 ax.set_xlabel("Time (s)", fontsize=10, fontweight="bold")
                                 ax.set_ylabel(ylabel_text, fontsize=10, fontweight="bold")
@@ -1876,13 +1888,20 @@ if not st.session_state.df_meta.empty:
                                 fontsize=8,
                             )
 
-                    ax.axvline(x=120, color="#94a3b8", linestyle=":", alpha=0.7)
-                    ax.axvline(x=240, color="#94a3b8", linestyle=":", alpha=0.7)
-                    ax.axvline(x=420, color="#94a3b8", linestyle=":", alpha=0.7)
+                   # 依據側邊欄 t_start 動態計算基準時間點
+                    t_fmlp_b = t_start
+                    t_cb_b = t_start - 180
+                    t_drug_b = t_start - 300
 
-                    ax.text(120, 1.01, "Drug (2')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
-                    ax.text(240, 1.01, "CB (4')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
-                    ax.text(420, 1.01, "fMLF (7')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                   # 繪製動態虛線
+                    ax.axvline(x=t_drug_b, color="#94a3b8", linestyle=":", alpha=0.7)
+                    ax.axvline(x=t_cb_b, color="#94a3b8", linestyle=":", alpha=0.7)
+                    ax.axvline(x=t_fmlp_b, color="#94a3b8", linestyle=":", alpha=0.7)
+
+                   # 動態文字標籤
+                    ax.text(t_drug_b, 1.01, f"Drug ({int(t_drug_b//60)}')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                    ax.text(t_cb_b, 1.01, f"CB ({int(t_cb_b//60)}')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
+                    ax.text(t_fmlp_b, 1.01, f"fMLF ({int(t_fmlp_b//60)}')", transform=ax.get_xaxis_transform(), fontsize=8.5, color="#475569", ha="center", va="bottom", fontweight="bold")
 
                     ax.set_xlabel("Time (s)", fontweight="bold", fontsize=10)
                     ax.set_ylabel(ylabel_text, fontweight="bold", fontsize=10)
